@@ -88,6 +88,7 @@ esac
 # ships it and pre-write args.gn; gm.py keeps an existing args.gn as-is.
 if [ "$ARCH" = "arm64" ] && [ ! -f "out/$ARCH.release/args.gn" ]; then
   CLANG_PREFIX=""
+  RUNTIME_DIR=""
   for prefix in $(ls -d /usr/lib/llvm-* 2>/dev/null | sort -rV) /usr; do
     clang_bin="$prefix/bin/clang"
     if [ ! -x "$clang_bin" ]; then
@@ -96,6 +97,7 @@ if [ "$ARCH" = "arm64" ] && [ ! -f "out/$ARCH.release/args.gn" ]; then
     runtime_dir="$("$clang_bin" --print-runtime-dir 2>/dev/null || true)"
     if [ -n "$runtime_dir" ] && { [ -f "$runtime_dir/libclang_rt.builtins.a" ] || [ -f "$runtime_dir/libclang_rt.builtins-aarch64.a" ]; }; then
       CLANG_PREFIX="$prefix"
+      RUNTIME_DIR="$runtime_dir"
       break
     fi
   done
@@ -103,7 +105,25 @@ if [ "$ARCH" = "arm64" ] && [ ! -f "out/$ARCH.release/args.gn" ]; then
     echo "no clang installation with the compiler-rt builtins archive found" >&2
     exit 1
   fi
-  echo "using clang from $CLANG_PREFIX"
+  echo "using clang from $CLANG_PREFIX (runtime dir $RUNTIME_DIR)"
+
+  # build/config/clang/BUILD.gn hardcodes the vendor-full triple directory
+  # ($clang_base_path/lib/clang/<ver>/lib/aarch64-unknown-linux-gnu), while
+  # Debian-packaged clang ships its runtime under the vendor-less triple
+  # (aarch64-linux-gnu). Bridge the two layouts with symlinks.
+  EXPECTED_DIR="$(dirname "$RUNTIME_DIR")/aarch64-unknown-linux-gnu"
+  if [ ! -e "$EXPECTED_DIR" ]; then
+    if [ -f "$RUNTIME_DIR/libclang_rt.builtins.a" ]; then
+      sudo ln -s "$(basename "$RUNTIME_DIR")" "$EXPECTED_DIR"
+    else
+      sudo mkdir -p "$EXPECTED_DIR"
+      sudo ln -s "$RUNTIME_DIR/libclang_rt.builtins-aarch64.a" "$EXPECTED_DIR/libclang_rt.builtins.a"
+    fi
+  fi
+  if [ ! -f "$EXPECTED_DIR/libclang_rt.builtins.a" ]; then
+    echo "expected builtins archive still missing at $EXPECTED_DIR" >&2
+    exit 1
+  fi
   mkdir -p "out/$ARCH.release"
   cat > "out/$ARCH.release/args.gn" <<EOF
 is_component_build = false
