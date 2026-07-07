@@ -62,6 +62,15 @@ jobs:
           sudo docker image prune --all --force
           df -h /
 
+      - name: Install build prerequisites
+        if: steps.d8-cache.outputs.cache-hit != 'true'
+        run: |
+          # gm.py uses the system clang/lld on arm64 hosts (no prebuilt
+          # toolchain exists for linux-arm64).
+          if ! command -v clang > /dev/null || ! command -v ld.lld > /dev/null; then
+            sudo apt-get update && sudo apt-get install -y clang lld
+          fi
+
       - name: Build d8
         if: steps.d8-cache.outputs.cache-hit != 'true'
         env:

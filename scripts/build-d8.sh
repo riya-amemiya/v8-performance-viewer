@@ -12,7 +12,8 @@
 #
 # The script materializes the submodule, checks out the requested commit,
 # fetches build dependencies with gclient (depot_tools), and builds the
-# monolithic release d8 used for benchmarking.
+# release d8 used for benchmarking with tools/dev/gm.py, natively for the
+# host architecture.
 
 set -euo pipefail
 
@@ -64,15 +65,27 @@ EOF
 gclient sync --no-history -j"$(nproc)"
 
 cd "$ROOT/v8"
-GN_ARGS='is_debug=false target_cpu="x64" is_component_build=false dcheck_always_on=false symbol_level=0'
-buildtools/linux64/gn gen out/release --args="$GN_ARGS"
-third_party/ninja/ninja -C out/release d8
+case "$(uname -m)" in
+  aarch64 | arm64) ARCH=arm64 ;;
+  x86_64) ARCH=x64 ;;
+  *)
+    echo "unsupported host architecture $(uname -m)" >&2
+    exit 1
+    ;;
+esac
 
+# gm.py writes args.gn for the arch/mode (release: is_debug=false,
+# dcheck_always_on=false, is_component_build=false), runs gn gen, and builds
+# with autoninja. On arm64 hosts it selects the system clang because no
+# prebuilt toolchain exists for linux-arm64.
+python3 tools/dev/gm.py "$ARCH.release" d8
+
+OUT="out/$ARCH.release"
 mkdir -p "$OUT_DIR"
-cp out/release/d8 "$OUT_DIR/"
+cp "$OUT/d8" "$OUT_DIR/"
 for data_file in snapshot_blob.bin icudtl.dat; do
-  if [ -f "out/release/$data_file" ]; then
-    cp "out/release/$data_file" "$OUT_DIR/"
+  if [ -f "$OUT/$data_file" ]; then
+    cp "$OUT/$data_file" "$OUT_DIR/"
   fi
 done
 
