@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* Chart and chrome tokens, light mode first, stepped (not flipped) for dark.
+   Values follow the project's data-viz reference palette. */
+:root {
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --ink-1: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --series-baseline: #2a78d6;
+  --series-target: #1baf7a;
+  --on-baseline: #ffffff;
+  --on-target: #0b0b0b;
+  --delta-good: #006300;
+  --delta-bad: #d03b3b;
+  --ring: rgba(11, 11, 11, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --ink-1: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --series-baseline: #3987e5;
+    --series-target: #199e70;
+    --on-baseline: #ffffff;
+    --on-target: #0b0b0b;
+    --delta-good: #0ca30c;
+    --delta-bad: #d03b3b;
+    --ring: rgba(255, 255, 255, 0.1);
+  }
+}
+
+@theme inline {
+  --color-surface-1: var(--surface-1);
+  --color-page: var(--page);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-muted: var(--ink-muted);
+  --color-grid: var(--grid);
+  --color-axis: var(--axis);
+  --color-series-baseline: var(--series-baseline);
+  --color-series-target: var(--series-target);
+  --color-on-baseline: var(--on-baseline);
+  --color-on-target: var(--on-target);
+  --color-delta-good: var(--delta-good);
+  --color-delta-bad: var(--delta-bad);
+  --color-ring: var(--ring);
+}
+
+html {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page);
+  color: var(--ink-1);
+}

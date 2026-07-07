@@ -11,3 +11,7 @@
 /plan.json
 
 node_modules/
+
+# Astro build output and generated types
+web/dist/
+web/.astro/

@@ -89,6 +89,7 @@ for (const bench of plan.benches) {
     const ratio = target.stats.median / baseline.stats.median;
     const result = {
       name: bench.name,
+      dir: bench.dir,
       bench: bench.bench,
       baseline,
       target,
