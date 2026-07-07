@@ -1,0 +1,152 @@
+name: benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: Only run bench folders whose name contains this substring
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "bench/**"
+      - "scripts/**"
+      - "web/**"
+      - ".github/workflows/bench.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve versions and benches
+        id: plan
+        env:
+          BENCH_FILTER: ${{ inputs.filter }}
+        run: node scripts/plan.mjs
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.plan.outputs.plan).versions }}
+    name: build d8 (${{ matrix.version.spec }})
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore previously built d8
+        id: d8-cache
+        uses: actions/cache@v6
+        with:
+          path: d8-out
+          key: d8-${{ matrix.version.sha }}-${{ hashFiles('scripts/build-d8.sh') }}
+
+      - name: Free disk space
+        if: steps.d8-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+
+      - name: Build d8
+        if: steps.d8-cache.outputs.cache-hit != 'true'
+        env:
+          SOURCE: ${{ matrix.version.source }}
+          REF: ${{ matrix.version.ref }}
+          SHA: ${{ matrix.version.sha }}
+        run: scripts/build-d8.sh "$SOURCE" "$REF" "$SHA" "$PWD/d8-out"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: d8-${{ matrix.version.key }}
+          path: d8-out
+          if-no-files-found: error
+
+  bench:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write plan file
+        env:
+          PLAN: ${{ needs.plan.outputs.plan }}
+        run: printf '%s' "$PLAN" > plan.json
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: d8-*
+          path: d8-bin
+
+      - name: Run benchmarks
+        run: |
+          chmod +x d8-bin/d8-*/d8
+          node scripts/run-bench.mjs --plan plan.json --d8-root d8-bin --out results
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench-results
+          path: results
+          if-no-files-found: error
+
+  deploy:
+    needs: bench
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: bench-results
+          path: results
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install viewer dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Inject benchmark results
+        run: |
+          rm -f web/src/data/results/*.json
+          cp results/*.json web/src/data/results/
+
+      - name: Build viewer
+        working-directory: web
+        env:
+          SITE_URL: https://${{ github.repository_owner }}.github.io
+          BASE_PATH: /${{ github.event.repository.name }}
+        run: bun run build
+
+      - uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
