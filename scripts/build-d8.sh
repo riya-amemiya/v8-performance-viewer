@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build a release d8 for one resolved V8 version inside the v8 submodule.
+# Build a release arm64 d8 for one resolved V8 version inside the v8
+# submodule.
 #
 # Usage:
 #   scripts/build-d8.sh <source> <ref> <sha> <output-dir>
@@ -11,9 +12,11 @@
 #     output-dir  directory receiving d8 and its runtime data files
 #
 # The script materializes the submodule, checks out the requested commit,
-# fetches build dependencies with gclient (depot_tools), and builds the
-# release d8 used for benchmarking with tools/dev/gm.py, natively for the
-# host architecture.
+# fetches build dependencies with gclient (depot_tools), and cross-compiles
+# an arm64 d8 with V8's bundled toolchain. This is the toolchain-supported
+# way to produce arm64 binaries: the bundled clang only exists for x64
+# hosts, so the build runs on an x64 runner and the bench jobs execute the
+# resulting binary natively on arm64 runners.
 
 set -euo pipefail
 
@@ -24,6 +27,11 @@ OUT_DIR=$4
 
 UPSTREAM_URL="https://chromium.googlesource.com/v8/v8.git"
 DEPOT_TOOLS_URL="https://chromium.googlesource.com/chromium/tools/depot_tools.git"
+
+if [ "$(uname -m)" != "x86_64" ]; then
+  echo "this build must run on an x64 host (V8 ships no toolchain for $(uname -m) hosts)" >&2
+  exit 1
+fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -50,13 +58,6 @@ export PATH="$ROOT/.depot_tools:$PATH"
 export DEPOT_TOOLS_UPDATE=0
 export DEPOT_TOOLS_METRICS=0
 
-# A bare clone of depot_tools ships only wrapper scripts; the gn/autoninja
-# wrappers refuse to run until the pinned python3 is bootstrapped
-# (python3_bin_reldir.txt). Auxiliary tools in the bootstrap (e.g.
-# luci-auth) are allowed to fail, so verify the one file that matters.
-"$ROOT/.depot_tools/ensure_bootstrap" || true
-test -f "$ROOT/.depot_tools/python3_bin_reldir.txt"
-
 cat > "$ROOT/.gclient" <<EOF
 solutions = [
   {
@@ -72,87 +73,22 @@ EOF
 gclient sync --no-history -j"$(nproc)"
 
 cd "$ROOT/v8"
-case "$(uname -m)" in
-  aarch64 | arm64) ARCH=arm64 ;;
-  x86_64) ARCH=x64 ;;
-  *)
-    echo "unsupported host architecture $(uname -m)" >&2
-    exit 1
-    ;;
-esac
 
-# On arm64 hosts gm.py uses the system clang (no prebuilt toolchain exists
-# for linux-arm64), but it hardcodes clang_base_path = "/usr", which on the
-# runner image resolves to a preinstalled clang without the compiler-rt
-# builtins archive for aarch64. Pick a clang installation that actually
-# ships it and pre-write args.gn; gm.py keeps an existing args.gn as-is.
-if [ "$ARCH" = "arm64" ] && [ ! -f "out/$ARCH.release/args.gn" ]; then
-  CLANG_PREFIX=""
-  RUNTIME_DIR=""
-  for prefix in $(ls -d /usr/lib/llvm-* 2>/dev/null | sort -rV) /usr; do
-    clang_bin="$prefix/bin/clang"
-    if [ ! -x "$clang_bin" ]; then
-      continue
-    fi
-    runtime_dir="$("$clang_bin" --print-runtime-dir 2>/dev/null || true)"
-    if [ -n "$runtime_dir" ] && { [ -f "$runtime_dir/libclang_rt.builtins.a" ] || [ -f "$runtime_dir/libclang_rt.builtins-aarch64.a" ]; }; then
-      CLANG_PREFIX="$prefix"
-      RUNTIME_DIR="$runtime_dir"
-      break
-    fi
-  done
-  if [ -z "$CLANG_PREFIX" ]; then
-    echo "no clang installation with the compiler-rt builtins archive found" >&2
-    exit 1
-  fi
-  echo "using clang from $CLANG_PREFIX (runtime dir $RUNTIME_DIR)"
+# Debian sysroots for the host tools (mksnapshot runs on x64 during the
+# build) and for the arm64 target link.
+python3 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
+python3 build/linux/sysroot_scripts/install-sysroot.py --arch=arm64
 
-  # build/config/clang/BUILD.gn hardcodes the vendor-full triple directory
-  # ($clang_base_path/lib/clang/<ver>/lib/aarch64-unknown-linux-gnu), while
-  # Debian-packaged clang ships its runtime under the vendor-less triple
-  # (aarch64-linux-gnu). Bridge the two layouts with symlinks.
-  EXPECTED_DIR="$(dirname "$RUNTIME_DIR")/aarch64-unknown-linux-gnu"
-  if [ ! -e "$EXPECTED_DIR" ]; then
-    if [ -f "$RUNTIME_DIR/libclang_rt.builtins.a" ]; then
-      sudo ln -s "$(basename "$RUNTIME_DIR")" "$EXPECTED_DIR"
-    else
-      sudo mkdir -p "$EXPECTED_DIR"
-      sudo ln -s "$RUNTIME_DIR/libclang_rt.builtins-aarch64.a" "$EXPECTED_DIR/libclang_rt.builtins.a"
-    fi
-  fi
-  if [ ! -f "$EXPECTED_DIR/libclang_rt.builtins.a" ]; then
-    echo "expected builtins archive still missing at $EXPECTED_DIR" >&2
-    exit 1
-  fi
-  mkdir -p "out/$ARCH.release"
-  cat > "out/$ARCH.release/args.gn" <<EOF
-is_component_build = false
-is_debug = false
-target_cpu = "arm64"
-v8_target_cpu = "arm64"
-clang_base_path = "$CLANG_PREFIX"
-clang_use_chrome_plugins = false
-v8_enable_sandbox = true
-v8_enable_backtrace = true
-v8_enable_disassembler = true
-v8_enable_object_print = true
-v8_enable_verify_heap = true
-dcheck_always_on = false
-EOF
-fi
+GN_ARGS='is_debug=false dcheck_always_on=false is_component_build=false symbol_level=0 target_cpu="arm64"'
+buildtools/linux64/gn gen out/release --args="$GN_ARGS"
+third_party/ninja/ninja -C out/release d8
 
-# gm.py writes args.gn for the arch/mode when missing (release:
-# is_debug=false, dcheck_always_on=false, is_component_build=false), runs
-# gn gen, and builds with autoninja.
-python3 tools/dev/gm.py "$ARCH.release" d8
-
-OUT="out/$ARCH.release"
 mkdir -p "$OUT_DIR"
-cp "$OUT/d8" "$OUT_DIR/"
+cp out/release/d8 "$OUT_DIR/"
 for data_file in snapshot_blob.bin icudtl.dat; do
-  if [ -f "$OUT/$data_file" ]; then
-    cp "$OUT/$data_file" "$OUT_DIR/"
+  if [ -f "out/release/$data_file" ]; then
+    cp "out/release/$data_file" "$OUT_DIR/"
   fi
 done
 
-"$OUT_DIR/d8" -e 'print(version())' | tee "$OUT_DIR/version.txt"
+file "$OUT_DIR/d8"

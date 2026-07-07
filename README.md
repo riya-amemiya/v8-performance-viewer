@@ -16,8 +16,8 @@ bench/<name>/           one benchmark per folder
   <bench script>.js     the benchmark itself
 scripts/
   plan.mjs              resolves configs into a build & run plan
-  build-d8.sh           builds d8 for one resolved version, natively for the
-                        host arch (depot_tools + gclient + tools/dev/gm.py)
+  build-d8.sh           cross-compiles an arm64 d8 for one resolved version
+                        with V8's bundled toolchain (depot_tools + gclient)
   harness.js            measurement harness executed inside d8
   measure.mjs           runs the benches referencing one version with its d8 build
   merge-results.mjs     pairs per-version measurements into comparison JSON
@@ -73,7 +73,9 @@ filter) and on pushes to `main` touching `bench/`, `scripts/`, or `web/`.
 
 1. `plan` resolves every config into concrete commits (`node scripts/plan.mjs`).
 2. `build` compiles `d8` once per unique version, in parallel, inside the `v8` submodule
-   using depot_tools/gclient. Built binaries are cached by commit sha
+   using depot_tools/gclient. It runs on x64 runners and cross-compiles arm64 binaries
+   with V8's bundled toolchain (the only host platform it is published for); the bench
+   jobs run them natively on arm64 runners. Built binaries are cached by commit sha
    (`actions/cache`), so a version is only ever compiled once — expect the first build of
    a new version to take a few hours, and later runs to restore from cache in seconds.
 3. `bench` runs as one job per version; each job measures only the benches referencing
