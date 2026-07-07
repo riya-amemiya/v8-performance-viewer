@@ -1,0 +1,134 @@
+---
+import '../styles/global.css';
+import BenchCard from '../components/BenchCard.astro';
+
+// Result JSONs are injected by CI (see .github/workflows/bench.yml); the
+// committed files are sample data so local dev has something to render.
+const modules = import.meta.glob('../data/results/*.json', { eager: true });
+const results = Object.values(modules)
+  .map((m: any) => m.default ?? m)
+  .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+const anySample = results.some((r: any) => r.meta?.sample);
+const meta: any = results[0]?.meta ?? {};
+const repository = meta.repository ?? 'riya-amemiya/v8-performance-viewer';
+const generatedAt = meta.generatedAt ? new Date(meta.generatedAt) : null;
+const generatedLabel = generatedAt
+  ? generatedAt.toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
+  : null;
+const faster = results.filter((r: any) => r.diff.ratio >= 1).length;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Speed comparison of V8 versions across the repository's benchmarks" />
+    <title>V8 Performance Viewer</title>
+  </head>
+  <body class="min-h-screen bg-page text-ink-1 antialiased">
+    <main class="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+      <header>
+        <p class="text-xs font-medium tracking-widest text-ink-muted uppercase">d8 release builds · same runner · median of samples</p>
+        <h1 class="mt-2 text-3xl font-bold tracking-tight">V8 Performance Viewer</h1>
+        <p class="mt-3 max-w-prose text-sm leading-relaxed text-ink-2">
+          Each benchmark below is executed by two builds of <span class="font-mono">d8</span> at the V8 versions named in
+          its <span class="font-mono">config.json</span>. Bars show median throughput in operations per second — longer is
+          faster.
+        </p>
+        {
+          generatedLabel && (
+            <p class="mt-3 text-xs text-ink-muted">
+              {results.length} benchmark{results.length === 1 ? '' : 's'} · {faster} faster on target · generated {generatedLabel}
+              {meta.runNumber && ` · run #${meta.runNumber}`}
+            </p>
+          )
+        }
+      </header>
+
+      {
+        anySample && (
+          <div
+            class="mt-6 flex items-start gap-2.5 rounded-xl border border-ring px-4 py-3 text-sm text-ink-2"
+            style="background: color-mix(in srgb, #fab219 10%, transparent)"
+          >
+            <span aria-hidden="true">⚠</span>
+            <p>
+              Sample data. These numbers come from a local stand-in shim, not from real d8 builds — run
+              the <span class="font-mono">benchmarks</span> workflow to replace them with measured results.
+            </p>
+          </div>
+        )
+      }
+
+      {
+        results.length > 0 ? (
+          <>
+            <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-ink-muted">
+              <span class="inline-flex items-center gap-1.5">
+                <span class="h-2.5 w-2.5 rounded-[3px] bg-series-baseline" />
+                baseline
+              </span>
+              <span class="inline-flex items-center gap-1.5">
+                <span class="h-2.5 w-2.5 rounded-[3px] bg-series-target" />
+                target
+              </span>
+              <span>hover a bar for full statistics</span>
+            </div>
+            <div class="mt-4 grid gap-5">
+              {results.map((result: any) => (
+                <BenchCard result={result} />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div class="mt-10 rounded-2xl border border-ring bg-surface-1 p-8 text-center text-sm text-ink-2">
+            No results yet. Trigger the <span class="font-mono">benchmarks</span> workflow to build d8, run the benches
+            under <span class="font-mono">bench/</span>, and publish the comparison here.
+          </div>
+        )
+      }
+
+      <footer class="mt-10 border-t border-grid pt-5 text-xs text-ink-muted">
+        <a
+          class="underline decoration-axis underline-offset-2 transition-colors hover:text-ink-2"
+          href={`https://github.com/${repository}`}
+        >
+          {repository}
+        </a>{' '}
+        · benchmarks live in <span class="font-mono">bench/</span> · powered by GitHub Actions
+      </footer>
+    </main>
+
+    <div
+      id="tooltip"
+      class="pointer-events-none fixed z-50 hidden max-w-xs rounded-lg border border-ring bg-surface-1 px-3 py-2 text-xs whitespace-pre-line text-ink-2 shadow-lg"
+      role="tooltip"
+    >
+    </div>
+
+    <script>
+      const tooltip = document.getElementById('tooltip')!;
+
+      function move(event: MouseEvent) {
+        const pad = 12;
+        const rect = tooltip.getBoundingClientRect();
+        const x = Math.min(event.clientX + pad, window.innerWidth - rect.width - pad);
+        const y = Math.min(event.clientY + pad, window.innerHeight - rect.height - pad);
+        tooltip.style.left = `${Math.max(pad, x)}px`;
+        tooltip.style.top = `${Math.max(pad, y)}px`;
+      }
+
+      for (const el of document.querySelectorAll<HTMLElement>('[data-tip]')) {
+        el.addEventListener('mouseenter', (event) => {
+          tooltip.textContent = el.dataset.tip ?? '';
+          tooltip.classList.remove('hidden');
+          move(event);
+        });
+        el.addEventListener('mousemove', move);
+        el.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+      }
+    </script>
+  </body>
+</html>

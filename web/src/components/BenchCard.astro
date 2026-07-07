@@ -1,0 +1,132 @@
+---
+// One benchmark comparison card: paired horizontal bars of median ops/sec
+// for the baseline and target versions, a percent-diff badge, and a
+// table view with the full statistics.
+const { result } = Astro.props;
+const { baseline, target, diff } = result;
+
+const max = Math.max(baseline.stats.median, target.stats.median);
+const rows = [
+  { role: 'baseline', run: baseline },
+  { role: 'target', run: target },
+];
+
+const fmtCompact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+const fmtFull = new Intl.NumberFormat('en');
+
+const good = diff.ratio >= 1;
+const pctLabel = `${diff.percent >= 0 ? '+' : ''}${diff.percent.toFixed(1)}%`;
+const deltaVar = good ? 'var(--delta-good)' : 'var(--delta-bad)';
+
+function tipText(run: any): string {
+  return [
+    `${run.spec} (${run.resolved})`,
+    `median ${fmtFull.format(Math.round(run.stats.median))} ops/s`,
+    `mean ${fmtFull.format(Math.round(run.stats.mean))} ± ${fmtFull.format(Math.round(run.stats.stddev))}`,
+    `CV ${(run.stats.cv * 100).toFixed(1)}%`,
+    `${run.samples.length} samples × ${fmtFull.format(run.innerIterations)} iterations`,
+    `d8 ${run.d8Version}`,
+  ].join('\n');
+}
+---
+
+<section class="rounded-2xl border border-ring bg-surface-1 p-5 sm:p-6">
+  <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+    <div class="min-w-0">
+      <h2 class="text-base font-semibold">{result.name}</h2>
+      <p class="mt-0.5 truncate font-mono text-xs text-ink-muted">
+        {`${result.dir ?? `bench/${result.name}`}/${result.bench.replace(/^\.\//, '')}`}
+      </p>
+    </div>
+    <span
+      class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-semibold"
+      style={`color:${deltaVar};background:color-mix(in srgb, ${deltaVar} 11%, transparent)`}
+    >
+      <span aria-hidden="true">{good ? '▲' : '▼'}</span>
+      {pctLabel}
+      <span class="font-normal opacity-80">{good ? 'faster' : 'slower'}</span>
+    </span>
+  </header>
+
+  <div class="mt-5 space-y-2">
+    {
+      rows.map(({ role, run }) => {
+        const pct = (run.stats.median / max) * 100;
+        const inside = pct > 78;
+        const barClass = role === 'baseline' ? 'bg-series-baseline' : 'bg-series-target';
+        const insideInk = role === 'baseline' ? 'text-on-baseline' : 'text-on-target';
+        return (
+          <div
+            class="flex items-center gap-3 py-0.5"
+            data-tip={tipText(run)}
+            aria-label={`${run.spec}, median ${fmtFull.format(Math.round(run.stats.median))} ops per second`}
+          >
+            <span class="w-24 shrink-0 truncate text-sm text-ink-2 sm:w-32" title={run.resolved}>
+              {run.spec}
+            </span>
+            <div class="relative h-5 flex-1">
+              <div class={`absolute inset-y-0 left-0 rounded-r-[4px] ${barClass}`} style={`width:${pct}%`} />
+              {inside ? (
+                <span
+                  class={`absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-medium ${insideInk}`}
+                  style={`width:${pct}%`}
+                >
+                  {fmtCompact.format(run.stats.median)}
+                </span>
+              ) : (
+                <span
+                  class="absolute inset-y-0 flex items-center text-xs font-medium text-ink-2"
+                  style={`left:calc(${pct}% + 8px)`}
+                >
+                  {fmtCompact.format(run.stats.median)}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })
+    }
+  </div>
+
+  <details class="mt-4 text-sm">
+    <summary class="cursor-pointer select-none text-ink-muted transition-colors hover:text-ink-2">Details</summary>
+    <div class="mt-2 overflow-x-auto">
+      <table class="w-full min-w-130 text-left text-xs tabular-nums">
+        <thead>
+          <tr class="text-ink-muted">
+            <th class="py-1.5 pr-3 font-normal">version</th>
+            <th class="py-1.5 pr-3 font-normal">median ops/s</th>
+            <th class="py-1.5 pr-3 font-normal">mean</th>
+            <th class="py-1.5 pr-3 font-normal">stddev</th>
+            <th class="py-1.5 pr-3 font-normal">CV</th>
+            <th class="py-1.5 pr-3 font-normal">samples</th>
+            <th class="py-1.5 pr-3 font-normal">iters/sample</th>
+            <th class="py-1.5 font-normal">commit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            rows.map(({ role, run }) => (
+              <tr class="border-t border-grid">
+                <td class="py-1.5 pr-3">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class={`h-2.5 w-2.5 shrink-0 rounded-[3px] ${role === 'baseline' ? 'bg-series-baseline' : 'bg-series-target'}`} />
+                    <span class="text-ink-1">{run.spec}</span>
+                    <span class="text-ink-muted">{run.d8Version}</span>
+                  </span>
+                </td>
+                <td class="py-1.5 pr-3 font-medium">{fmtFull.format(Math.round(run.stats.median))}</td>
+                <td class="py-1.5 pr-3">{fmtFull.format(Math.round(run.stats.mean))}</td>
+                <td class="py-1.5 pr-3">{fmtFull.format(Math.round(run.stats.stddev))}</td>
+                <td class="py-1.5 pr-3">{(run.stats.cv * 100).toFixed(1)}%</td>
+                <td class="py-1.5 pr-3">{run.samples.length}</td>
+                <td class="py-1.5 pr-3">{fmtFull.format(run.innerIterations)}</td>
+                <td class="py-1.5 font-mono">{run.sha.slice(0, 7)}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>

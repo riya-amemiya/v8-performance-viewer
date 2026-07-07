@@ -1,0 +1,17 @@
+# gclient workspace files created by scripts/build-d8.sh
+/.gclient
+/.gclient_entries
+/.gclient_previous_sync_commits
+/.depot_tools/
+/.cipd/
+
+# Build and bench outputs
+/d8-out/
+/results/
+/plan.json
+
+node_modules/
+
+# Astro build output and generated types
+web/dist/
+web/.astro/
