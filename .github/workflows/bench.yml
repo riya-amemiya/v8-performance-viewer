@@ -79,6 +79,11 @@ jobs:
   bench:
     needs: [plan, build]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.plan.outputs.plan).versions }}
+    name: bench (${{ matrix.version.spec }})
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -89,13 +94,40 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: d8-*
-          path: d8-bin
+          name: d8-${{ matrix.version.key }}
+          path: d8-bin/d8-${{ matrix.version.key }}
 
-      - name: Run benchmarks
+      - name: Run benchmarks for this version
+        env:
+          VERSION_KEY: ${{ matrix.version.key }}
         run: |
           chmod +x d8-bin/d8-*/d8
-          node scripts/run-bench.mjs --plan plan.json --d8-root d8-bin --out results
+          node scripts/measure.mjs --plan plan.json --version-key "$VERSION_KEY" --d8-root d8-bin --out measurements
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: measurements-${{ matrix.version.key }}
+          path: measurements
+          if-no-files-found: error
+
+  merge:
+    needs: [plan, bench]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Write plan file
+        env:
+          PLAN: ${{ needs.plan.outputs.plan }}
+        run: printf '%s' "$PLAN" > plan.json
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: measurements-*
+          path: measurements
+
+      - name: Merge measurements into comparison results
+        run: node scripts/merge-results.mjs --plan plan.json --measurements-root measurements --out results
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -104,7 +136,7 @@ jobs:
           if-no-files-found: error
 
   deploy:
-    needs: bench
+    needs: merge
     runs-on: ubuntu-latest
     permissions:
       contents: read
