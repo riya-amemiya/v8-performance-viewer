@@ -32,6 +32,20 @@ FORK_URL="$(git config -f .gitmodules submodule.v8.url)"
 
 git submodule update --init --depth 1 v8
 
+# Submodules keep their git dir under the superproject's .git/modules and
+# leave a gitfile at v8/.git. gm.py mistakes that shape for a git worktree
+# (or an agent-managed clone) and tries to set up a shared deps cache
+# against the superproject, which crashes. Move the git dir into v8/.git so
+# the checkout is a plain standalone repository.
+if [ -f v8/.git ]; then
+  SUBMODULE_GIT_DIR="$(git -C v8 rev-parse --absolute-git-dir)"
+  rm v8/.git
+  mv "$SUBMODULE_GIT_DIR" v8/.git
+  # core.worktree points back at the old location and breaks every git
+  # command once the git dir has moved; edit the config file directly.
+  git config --file v8/.git/config --unset core.worktree
+fi
+
 cd v8
 REMOTE=origin
 if [ "$SOURCE" = "upstream" ]; then
