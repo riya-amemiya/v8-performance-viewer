@@ -18,7 +18,8 @@ scripts/
   plan.mjs              resolves configs into a build & run plan
   build-d8.sh           builds d8 for one resolved version (depot_tools + gclient)
   harness.js            measurement harness executed inside d8
-  run-bench.mjs         runs each bench on both builds and writes result JSON
+  measure.mjs           runs the benches referencing one version with its d8 build
+  merge-results.mjs     pairs per-version measurements into comparison JSON
 web/                    Astro + Tailwind CSS viewer (bun)
 .github/workflows/bench.yml
 ```
@@ -74,9 +75,12 @@ filter) and on pushes to `main` touching `bench/`, `scripts/`, or `web/`.
    using depot_tools/gclient. Built binaries are cached by commit sha
    (`actions/cache`), so a version is only ever compiled once — expect the first build of
    a new version to take a few hours, and later runs to restore from cache in seconds.
-3. `bench` downloads all `d8` builds and runs every benchmark on a single runner, so the
-   two sides of each comparison share the same hardware.
-4. `deploy` injects the fresh result JSONs into the viewer, builds it with bun, and
+3. `bench` runs as one job per version; each job measures only the benches referencing
+   its version with its own `d8` build, so the two sides of a comparison never share a
+   runner process or an execution order (warm-up state from one side cannot leak into
+   the other). Each measurement records the runner CPU model for cross-checking.
+4. `merge` pairs the per-version measurements into one comparison JSON per bench.
+5. `deploy` injects the fresh result JSONs into the viewer, builds it with bun, and
    deploys to GitHub Pages.
 
 GitHub Pages must be set to the "GitHub Actions" source (Settings → Pages). The deploy
