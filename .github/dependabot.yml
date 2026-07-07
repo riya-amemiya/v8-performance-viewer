@@ -8,6 +8,10 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   # Viewer dependencies (bun.lock in web/).
   - package-ecosystem: "bun"
@@ -17,6 +21,10 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    groups:
+      bun:
+        patterns:
+          - "*"
 
   # v8 submodule pin.
   - package-ecosystem: "gitsubmodule"
@@ -26,3 +34,7 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    groups:
+      v8:
+        patterns:
+          - "*"
