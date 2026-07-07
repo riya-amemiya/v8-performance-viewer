@@ -50,6 +50,13 @@ export PATH="$ROOT/.depot_tools:$PATH"
 export DEPOT_TOOLS_UPDATE=0
 export DEPOT_TOOLS_METRICS=0
 
+# A bare clone of depot_tools ships only wrapper scripts; the gn/autoninja
+# wrappers refuse to run until the pinned python3 is bootstrapped
+# (python3_bin_reldir.txt). Auxiliary tools in the bootstrap (e.g.
+# luci-auth) are allowed to fail, so verify the one file that matters.
+"$ROOT/.depot_tools/ensure_bootstrap" || true
+test -f "$ROOT/.depot_tools/python3_bin_reldir.txt"
+
 cat > "$ROOT/.gclient" <<EOF
 solutions = [
   {
