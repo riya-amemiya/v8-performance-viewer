@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   plan:
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-latest
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
     steps:
@@ -37,7 +37,7 @@ jobs:
 
   build:
     needs: plan
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-latest
     timeout-minutes: 350
     strategy:
       fail-fast: false
@@ -62,18 +62,6 @@ jobs:
           sudo docker image prune --all --force
           df -h /
 
-      - name: Install build prerequisites
-        if: steps.d8-cache.outputs.cache-hit != 'true'
-        run: |
-          # gm.py uses the system clang/lld on arm64 hosts (no prebuilt
-          # toolchain exists for linux-arm64). libclang-rt-dev ships the
-          # compiler-rt builtins archive the link step needs; a preinstalled
-          # clang does not imply it is present, so install unconditionally.
-          if [ "$(uname -m)" = "aarch64" ]; then
-            sudo apt-get update
-            sudo apt-get install -y clang lld libclang-rt-dev
-          fi
-
       - name: Build d8
         if: steps.d8-cache.outputs.cache-hit != 'true'
         env:
@@ -90,7 +78,7 @@ jobs:
 
   bench:
     needs: [plan, build]
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -124,7 +112,7 @@ jobs:
 
   merge:
     needs: [plan, bench]
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -149,7 +137,7 @@ jobs:
 
   deploy:
     needs: merge
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
