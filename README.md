@@ -16,7 +16,8 @@ bench/<name>/           one benchmark per folder
   <bench script>.js     the benchmark itself
 scripts/
   plan.mjs              resolves configs into a build & run plan
-  build-d8.sh           builds d8 for one resolved version (depot_tools + gclient)
+  build-d8.sh           builds d8 for one resolved version, natively for the
+                        host arch (depot_tools + gclient + tools/dev/gm.py)
   harness.js            measurement harness executed inside d8
   measure.mjs           runs the benches referencing one version with its d8 build
   merge-results.mjs     pairs per-version measurements into comparison JSON

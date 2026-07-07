@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: d8-out
-          key: d8-${{ matrix.version.sha }}-${{ hashFiles('scripts/build-d8.sh') }}
+          key: d8-${{ runner.os }}-${{ matrix.version.sha }}-${{ hashFiles('scripts/build-d8.sh') }}
 
       - name: Free disk space
         if: steps.d8-cache.outputs.cache-hit != 'true'
@@ -61,6 +61,15 @@ jobs:
             /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo docker image prune --all --force
           df -h /
+
+      - name: Install build prerequisites
+        if: steps.d8-cache.outputs.cache-hit != 'true'
+        run: |
+          # gm.py uses the system clang/lld on arm64 hosts (no prebuilt
+          # toolchain exists for linux-arm64).
+          if ! command -v clang > /dev/null || ! command -v ld.lld > /dev/null; then
+            sudo apt-get update && sudo apt-get install -y clang lld
+          fi
 
       - name: Build d8
         if: steps.d8-cache.outputs.cache-hit != 'true'
