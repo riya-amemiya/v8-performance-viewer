@@ -42,34 +42,38 @@ mkdirSync(outDir, { recursive: true });
 const failures = [];
 for (const bench of plan.benches) {
   try {
-    const baseline = loadMeasurement(bench.baseline, bench.name);
-    const target = loadMeasurement(bench.target, bench.name);
-    // Ratio of median throughputs; > 1 means the target version is faster.
-    const ratio = target.side.stats.median / baseline.side.stats.median;
+    const loaded = bench.versions.map((spec) => loadMeasurement(spec, bench.name));
+    // The first spec in the config is the reference the others are read
+    // against; percent > 0 means that version is faster than the reference.
+    const refMedian = loaded[0].side.stats.median;
+    const versions = loaded.map((m, i) => {
+      const ratio = m.side.stats.median / refMedian;
+      return {
+        ...m.side,
+        reference: i === 0,
+        ratioToReference: ratio,
+        percentVsReference: (ratio - 1) * 100,
+      };
+    });
     const result = {
       name: bench.name,
       dir: bench.dir,
       bench: bench.bench,
-      baseline: baseline.side,
-      target: target.side,
-      diff: {
-        ratio,
-        percent: (ratio - 1) * 100,
-        faster: ratio >= 1 ? 'target' : 'baseline',
-      },
+      reference: versions[0].spec,
+      versions,
       meta: {
         generatedAt: new Date().toISOString(),
         repository: process.env.GITHUB_REPOSITORY ?? null,
         runId: process.env.GITHUB_RUN_ID ?? null,
         runNumber: process.env.GITHUB_RUN_NUMBER ?? null,
-        sample: Boolean(baseline.sample || target.sample),
+        sample: loaded.some((m) => m.sample),
       },
     };
     writeFileSync(join(outDir, `${bench.name}.json`), JSON.stringify(result, null, 2));
     console.log(
-      `${bench.name}; ${bench.baseline} -> ${bench.target}; ` +
-        `${baseline.side.stats.median.toFixed(0)} -> ${target.side.stats.median.toFixed(0)} ops/s ` +
-        `(${ratio >= 1 ? '+' : ''}${((ratio - 1) * 100).toFixed(2)}%)`,
+      `${bench.name}; ${versions
+        .map((v) => `${v.spec} ${v.stats.median.toFixed(0)}${v.reference ? '*' : ` (${v.percentVsReference >= 0 ? '+' : ''}${v.percentVsReference.toFixed(1)}%)`}`)
+        .join(', ')}`,
     );
   } catch (error) {
     failures.push({ bench: bench.name, error: String(error) });

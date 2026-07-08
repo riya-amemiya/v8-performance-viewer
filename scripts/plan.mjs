@@ -11,7 +11,7 @@
 //                  a workflow job can expose it as an output. Otherwise the
 //                  plan is printed to stdout.
 //
-// Version spec forms accepted in config.json ("baseline" / "target"):
+// Version spec forms accepted in each entry of a config's "versions" array:
 //   "15.1"        V8 milestone; resolved to the upstream release branch tip
 //                 refs/branch-heads/15.1 (the checkout V8 documents for
 //                 working with a release).
@@ -141,10 +141,17 @@ function loadBenches(filter) {
       throw new Error(`bench folder "${entry.name}" has no config.json`);
     }
     const config = JSON.parse(readFileSync(configPath, 'utf8'));
-    for (const field of ['baseline', 'target', 'bench']) {
-      if (typeof config[field] !== 'string' || config[field].length === 0) {
-        throw new Error(`bench "${entry.name}": config.json must define a non-empty string "${field}"`);
-      }
+    if (typeof config.bench !== 'string' || config.bench.length === 0) {
+      throw new Error(`bench "${entry.name}": config.json must define a non-empty string "bench"`);
+    }
+    // An ordered "versions" array of two or more specs; the first entry is the
+    // reference the others are compared against.
+    const versions = config.versions;
+    if (!Array.isArray(versions) || versions.length < 2 || versions.some((v) => typeof v !== 'string' || v.length === 0)) {
+      throw new Error(`bench "${entry.name}": config.json must define a "versions" array of at least two non-empty version specs`);
+    }
+    if (new Set(versions).size !== versions.length) {
+      throw new Error(`bench "${entry.name}": "versions" must not repeat a spec`);
     }
     const benchFile = resolve(dir, config.bench);
     if (!existsSync(benchFile)) {
@@ -154,8 +161,7 @@ function loadBenches(filter) {
       name: entry.name,
       dir: `bench/${entry.name}`,
       bench: config.bench,
-      baseline: config.baseline,
-      target: config.target,
+      versions,
     });
   }
   return benches;
@@ -169,7 +175,7 @@ if (benches.length === 0) {
   throw new Error(filter ? `no bench folder matches filter "${filter}"` : 'no bench folders found under bench/');
 }
 
-const specs = [...new Set(benches.flatMap((b) => [b.baseline, b.target]))];
+const specs = [...new Set(benches.flatMap((b) => b.versions))];
 const versions = specs.map((spec) => {
   const v = resolveSpec(spec);
   return { ...v, key: `${sanitizeKey(spec)}-${v.sha.slice(0, 10)}` };

@@ -1,5 +1,4 @@
 {
-  "baseline": "14.5",
-  "target": "15.1",
+  "versions": ["14.5", "15.1"],
   "bench": "./copy-within.js"
 }
