@@ -1,0 +1,4 @@
+{
+  "versions": ["15.1", "main"],
+  "bench": "./array-alloc.js"
+}
