@@ -1,5 +1,4 @@
 {
-  "baseline": "15.1",
-  "target": "main",
+  "versions": ["15.1", "main"],
   "bench": "./object-entries.js"
 }

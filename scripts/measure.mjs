@@ -43,7 +43,7 @@ if (!version) {
   throw new Error(`plan has no version with key "${versionKey}"`);
 }
 
-const benches = plan.benches.filter((b) => b.baseline === version.spec || b.target === version.spec);
+const benches = plan.benches.filter((b) => b.versions.includes(version.spec));
 if (benches.length === 0) {
   throw new Error(`no bench references version spec "${version.spec}"`);
 }

@@ -1,32 +1,41 @@
 ---
-// One benchmark comparison card: paired horizontal bars of median ops/sec
-// for the baseline and target versions, a percent-diff badge, and a
-// table view with the full statistics.
+// One benchmark card: a horizontal bar of median ops/sec per version across
+// the versions named in the bench config, a headline badge for the newest
+// version versus the reference (the first version), and a table view with
+// the full statistics. Bars share one hue because they are the same metric
+// (throughput) across versions; the version label beside each bar carries
+// identity, and the reference-relative percent rides each non-reference bar.
 const { result } = Astro.props;
-const { baseline, target, diff } = result;
+const versions = result.versions;
+const reference = versions.find((v: any) => v.reference) ?? versions[0];
+const newest = versions[versions.length - 1];
 
-const max = Math.max(baseline.stats.median, target.stats.median);
-const rows = [
-  { role: 'baseline', run: baseline },
-  { role: 'target', run: target },
-];
+const max = Math.max(...versions.map((v: any) => v.stats.median));
 
 const fmtCompact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const fmtFull = new Intl.NumberFormat('en');
 
-const good = diff.ratio >= 1;
-const pctLabel = `${diff.percent >= 0 ? '+' : ''}${diff.percent.toFixed(1)}%`;
-const deltaVar = good ? 'var(--delta-good)' : 'var(--delta-bad)';
+const headlinePct = newest.percentVsReference;
+const headlineGood = headlinePct >= 0;
+const headlineVar = headlineGood ? 'var(--delta-good)' : 'var(--delta-bad)';
+
+function deltaLabel(pct: number): string {
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+}
 
 function tipText(run: any): string {
-  return [
-    `${run.spec} (${run.resolved})`,
+  const lines = [
+    `${run.spec} (${run.resolved})${run.reference ? ' — reference' : ''}`,
     `median ${fmtFull.format(Math.round(run.stats.median))} ops/s`,
     `mean ${fmtFull.format(Math.round(run.stats.mean))} ± ${fmtFull.format(Math.round(run.stats.stddev))}`,
     `CV ${(run.stats.cv * 100).toFixed(1)}%`,
     `${run.samples.length} samples × ${fmtFull.format(run.innerIterations)} iterations`,
     `d8 ${run.d8Version}`,
-  ].join('\n');
+  ];
+  if (!run.reference) {
+    lines.splice(1, 0, `${deltaLabel(run.percentVsReference)} vs ${reference.spec}`);
+  }
+  return lines.join('\n');
 }
 ---
 
@@ -40,35 +49,39 @@ function tipText(run: any): string {
     </div>
     <span
       class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-semibold"
-      style={`color:${deltaVar};background:color-mix(in srgb, ${deltaVar} 11%, transparent)`}
+      style={`color:${headlineVar};background:color-mix(in srgb, ${headlineVar} 11%, transparent)`}
+      title={`${newest.spec} vs ${reference.spec} (reference)`}
     >
-      <span aria-hidden="true">{good ? '▲' : '▼'}</span>
-      {pctLabel}
-      <span class="font-normal opacity-80">{good ? 'faster' : 'slower'}</span>
+      <span aria-hidden="true">{headlineGood ? '▲' : '▼'}</span>
+      {deltaLabel(headlinePct)}
+      <span class="font-normal opacity-80">{newest.spec} vs {reference.spec}</span>
     </span>
   </header>
 
   <div class="mt-5 space-y-2">
     {
-      rows.map(({ role, run }) => {
+      versions.map((run: any) => {
         const pct = (run.stats.median / max) * 100;
-        const inside = pct > 78;
-        const barClass = role === 'baseline' ? 'bg-series-baseline' : 'bg-series-target';
-        const insideInk = role === 'baseline' ? 'text-on-baseline' : 'text-on-target';
+        const inside = pct > 72;
+        const delta = run.reference ? null : run.percentVsReference;
+        const deltaVar = delta === null ? '' : delta >= 0 ? 'var(--delta-good)' : 'var(--delta-bad)';
         return (
           <div
             class="flex items-center gap-3 py-0.5"
             data-tip={tipText(run)}
-            aria-label={`${run.spec}, median ${fmtFull.format(Math.round(run.stats.median))} ops per second`}
+            aria-label={`${run.spec}, median ${fmtFull.format(Math.round(run.stats.median))} ops per second${run.reference ? ', reference' : `, ${deltaLabel(run.percentVsReference)} vs ${reference.spec}`}`}
           >
-            <span class="w-24 shrink-0 truncate text-sm text-ink-2 sm:w-32" title={run.resolved}>
-              {run.spec}
+            <span class="flex w-24 shrink-0 items-center gap-1.5 sm:w-32" title={run.resolved}>
+              <span class="truncate text-sm text-ink-2">{run.spec}</span>
+              {run.reference && (
+                <span class="shrink-0 rounded-sm border border-ring px-1 text-[10px] leading-4 text-ink-muted">ref</span>
+              )}
             </span>
             <div class="relative h-5 flex-1">
-              <div class={`absolute inset-y-0 left-0 rounded-r-[4px] ${barClass}`} style={`width:${pct}%`} />
+              <div class="absolute inset-y-0 left-0 rounded-r-[4px] bg-series-baseline" style={`width:${Math.max(pct, 0.5)}%`} />
               {inside ? (
                 <span
-                  class={`absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-medium ${insideInk}`}
+                  class="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-medium text-on-baseline"
                   style={`width:${pct}%`}
                 >
                   {fmtCompact.format(run.stats.median)}
@@ -82,6 +95,9 @@ function tipText(run: any): string {
                 </span>
               )}
             </div>
+            <span class="w-16 shrink-0 text-right text-xs font-medium tabular-nums" style={delta === null ? 'color:var(--ink-muted)' : `color:${deltaVar}`}>
+              {delta === null ? 'ref' : deltaLabel(delta)}
+            </span>
           </div>
         );
       })
@@ -91,11 +107,12 @@ function tipText(run: any): string {
   <details class="mt-4 text-sm">
     <summary class="cursor-pointer select-none text-ink-muted transition-colors hover:text-ink-2">Details</summary>
     <div class="mt-2 overflow-x-auto">
-      <table class="w-full min-w-130 text-left text-xs tabular-nums">
+      <table class="w-full min-w-140 text-left text-xs tabular-nums">
         <thead>
           <tr class="text-ink-muted">
             <th class="py-1.5 pr-3 font-normal">version</th>
             <th class="py-1.5 pr-3 font-normal">median ops/s</th>
+            <th class="py-1.5 pr-3 font-normal">vs {reference.spec}</th>
             <th class="py-1.5 pr-3 font-normal">mean</th>
             <th class="py-1.5 pr-3 font-normal">stddev</th>
             <th class="py-1.5 pr-3 font-normal">CV</th>
@@ -106,16 +123,20 @@ function tipText(run: any): string {
         </thead>
         <tbody>
           {
-            rows.map(({ role, run }) => (
+            versions.map((run: any) => (
               <tr class="border-t border-grid">
                 <td class="py-1.5 pr-3">
                   <span class="inline-flex items-center gap-1.5">
-                    <span class={`h-2.5 w-2.5 shrink-0 rounded-[3px] ${role === 'baseline' ? 'bg-series-baseline' : 'bg-series-target'}`} />
+                    <span class="h-2.5 w-2.5 shrink-0 rounded-[3px] bg-series-baseline" />
                     <span class="text-ink-1">{run.spec}</span>
+                    {run.reference && <span class="text-ink-muted">ref</span>}
                     <span class="text-ink-muted">{run.d8Version}</span>
                   </span>
                 </td>
                 <td class="py-1.5 pr-3 font-medium">{fmtFull.format(Math.round(run.stats.median))}</td>
+                <td class="py-1.5 pr-3" style={run.reference ? 'color:var(--ink-muted)' : `color:${run.percentVsReference >= 0 ? 'var(--delta-good)' : 'var(--delta-bad)'}`}>
+                  {run.reference ? '—' : deltaLabel(run.percentVsReference)}
+                </td>
                 <td class="py-1.5 pr-3">{fmtFull.format(Math.round(run.stats.mean))}</td>
                 <td class="py-1.5 pr-3">{fmtFull.format(Math.round(run.stats.stddev))}</td>
                 <td class="py-1.5 pr-3">{(run.stats.cv * 100).toFixed(1)}%</td>

@@ -1,11 +1,12 @@
 # v8-performance-viewer
 
-Benchmark two V8 versions against each other and visualize the speed difference on the web.
+Benchmark V8 versions against each other and visualize the speed difference on the web.
 
 The V8 source lives in this repository as the `v8/` git submodule (a fork of upstream V8).
-For every benchmark folder, GitHub Actions builds `d8` at the two requested versions, runs the
-benchmark with both builds on the same runner, and publishes an [Astro](https://astro.build)
-viewer of the comparison to GitHub Pages.
+For every benchmark folder, GitHub Actions builds `d8` at each requested version, runs the
+benchmark on every build, and publishes an [Astro](https://astro.build) viewer of the
+comparison to GitHub Pages. A bench names two or more versions; the viewer draws one bar per
+version and measures each against the first (the reference).
 
 ## Repository layout
 
@@ -19,7 +20,7 @@ scripts/
   build-d8.sh           builds d8 for one resolved version (depot_tools + gclient)
   harness.js            measurement harness executed inside d8
   measure.mjs           runs the benches referencing one version with its d8 build
-  merge-results.mjs     pairs per-version measurements into comparison JSON
+  merge-results.mjs     combines per-version measurements into comparison JSON
 web/                    Astro + Tailwind CSS viewer (bun)
 .github/workflows/bench.yml
 ```
@@ -30,13 +31,14 @@ Create a folder under `bench/` containing a `config.json` and the benchmark scri
 
 ```json
 {
-  "baseline": "14.5",
-  "target": "15.1",
+  "versions": ["14.5", "14.7", "15.1"],
   "bench": "./array-flat.js"
 }
 ```
 
-`baseline` and `target` accept the following version specs.
+`versions` is an ordered list of two or more version specs. The first entry is the reference
+the others are compared against; the viewer draws one bar per version and labels each with its
+percent versus the reference. Each entry accepts the following version specs.
 
 | Spec | Meaning |
 | --- | --- |
@@ -63,9 +65,9 @@ var BENCH_CONFIG = { samples: 30, warmupSamples: 10, minSampleMs: 300 };
 
 The harness calibrates an inner iteration count so one sample takes at least `minSampleMs`
 (300ms by default), discards `warmupSamples` warmup samples, then measures `samples` samples
-and reports the median ops/sec of each build. The viewer shows the ratio of the two medians.
-Longer samples average more inner iterations together, so raising `minSampleMs` is the main
-lever if a bench still reads noisily.
+and reports the median ops/sec of each build. The viewer shows each version's median relative
+to the reference. Longer samples average more inner iterations together, so raising
+`minSampleMs` is the main lever if a bench still reads noisily.
 
 ## CI workflow
 
@@ -78,10 +80,11 @@ filter) and on pushes to `main` touching `bench/`, `scripts/`, or `web/`.
    (`actions/cache`), so a version is only ever compiled once — expect the first build of
    a new version to take a few hours, and later runs to restore from cache in seconds.
 3. `bench` runs as one job per version; each job measures only the benches referencing
-   its version with its own `d8` build, so the two sides of a comparison never share a
+   its version with its own `d8` build, so no two versions of a comparison ever share a
    runner process or an execution order (warm-up state from one side cannot leak into
    the other). Each measurement records the runner CPU model for cross-checking.
-4. `merge` pairs the per-version measurements into one comparison JSON per bench.
+4. `merge` combines the per-version measurements into one comparison JSON per bench, with
+   every version's median expressed relative to the first (the reference).
 5. `deploy` injects the fresh result JSONs into the viewer, builds it with bun, and
    deploys to GitHub Pages.
 
