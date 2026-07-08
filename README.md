@@ -58,12 +58,14 @@ function run() {
 }
 
 // optional overrides
-var BENCH_CONFIG = { samples: 30, warmupSamples: 10, minSampleMs: 50 };
+var BENCH_CONFIG = { samples: 30, warmupSamples: 10, minSampleMs: 300 };
 ```
 
-The harness calibrates an inner iteration count so one sample takes at least `minSampleMs`,
-discards `warmupSamples` warmup samples, then measures `samples` samples and reports the
-median ops/sec of each build. The viewer shows the ratio of the two medians.
+The harness calibrates an inner iteration count so one sample takes at least `minSampleMs`
+(300ms by default), discards `warmupSamples` warmup samples, then measures `samples` samples
+and reports the median ops/sec of each build. The viewer shows the ratio of the two medians.
+Longer samples average more inner iterations together, so raising `minSampleMs` is the main
+lever if a bench still reads noisily.
 
 ## CI workflow
 
