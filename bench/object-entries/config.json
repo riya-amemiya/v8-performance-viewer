@@ -1,4 +1,0 @@
-{
-  "versions": ["15.1", "main"],
-  "bench": "./object-entries.js"
-}
