@@ -1,8 +1,7 @@
 // Deep flat() across all six fast ElementsKind sub-array shapes.
 // With the nextDepth==0 guard removed, sub-arrays are bulk-copied even when
 // nextDepth>0. flat(2) on one-level nesting puts sub-arrays at nextDepth==1
-// (improved path); flat(1) puts them at nextDepth==0 (bulk-copied in both
-// versions) as a control.
+// (the improved path), which is what this benchmark exercises.
 //
 // HOLEY shapes carry a single hole at index 1 (gap==1, well under kMaxGap==1024
 // so no dictionary demotion). PACKED_ELEMENTS / HOLEY_ELEMENTS use string
@@ -12,7 +11,12 @@
 //
 // Verify the shapes under d8 with `--allow-natives-syntax`, then %DebugPrint or
 // %HasHoleyElements / %HasSmiElements / %HasDoubleElements / %HasObjectElements
-// on any sub-array (e.g. pSmi[0], hObj[0]).
+// on any sub-array (e.g. shapes[0][0], shapes[5][0]).
+//
+// See scripts/harness.js for the run()/setup() contract. The harness times a
+// single run() that flat(2)s all six shapes, so the reported ops/sec covers
+// every ElementsKind at once; the baseline-vs-target versions play the role
+// the flat(1) control did before.
 
 function makeSmiNested(n, m) {
   let o = [];
@@ -47,36 +51,23 @@ function makeObjHoley(n, m) {
   return o;
 }
 
-let sink;
-function bench(label, o, depth, iters) {
-  for (let i = 0; i < 5; i++) sink = o.flat(depth);
-  let best = Infinity;
-  for (let r = 0; r < 8; r++) {
-    let t0 = performance.now();
-    for (let i = 0; i < iters; i++) sink = o.flat(depth);
-    let t1 = performance.now();
-    const ms = (t1 - t0) / iters;
-    if (ms < best) best = ms;
-  }
-  console.log(label.padEnd(36) + best.toFixed(4).padStart(10) + " ms/op");
+var shapes;
+
+function setup() {
+  shapes = [
+    makeSmiNested(1000, 1000),   // PACKED_SMI,      1M elements, 1000 sub-arrays of 1000
+    makeSmiHoley(1000, 1000),    // HOLEY_SMI
+    makeDblNested(1000, 1000),   // PACKED_DOUBLE
+    makeDblHoley(1000, 1000),    // HOLEY_DOUBLE
+    makeObjNested(1000, 1000),   // PACKED_ELEMENTS
+    makeObjHoley(1000, 1000),    // HOLEY_ELEMENTS
+  ];
 }
 
-let pSmi = makeSmiNested(1000, 1000);   // PACKED_SMI,      1M elements, 1000 sub-arrays of 1000
-let hSmi = makeSmiHoley(1000, 1000);    // HOLEY_SMI
-let pDbl = makeDblNested(1000, 1000);   // PACKED_DOUBLE
-let hDbl = makeDblHoley(1000, 1000);    // HOLEY_DOUBLE
-let pObj = makeObjNested(1000, 1000);   // PACKED_ELEMENTS
-let hObj = makeObjHoley(1000, 1000);    // HOLEY_ELEMENTS
-
-bench("PACKED_SMI      flat(2) [improved]", pSmi, 2, 80);
-bench("PACKED_SMI      flat(1) [control]",  pSmi, 1, 80);
-bench("HOLEY_SMI       flat(2) [improved]", hSmi, 2, 80);
-bench("HOLEY_SMI       flat(1) [control]",  hSmi, 1, 80);
-bench("PACKED_DOUBLE   flat(2) [improved]", pDbl, 2, 80);
-bench("PACKED_DOUBLE   flat(1) [control]",  pDbl, 1, 80);
-bench("HOLEY_DOUBLE    flat(2) [improved]", hDbl, 2, 80);
-bench("HOLEY_DOUBLE    flat(1) [control]",  hDbl, 1, 80);
-bench("PACKED_ELEMENTS flat(2) [improved]", pObj, 2, 80);
-bench("PACKED_ELEMENTS flat(1) [control]",  pObj, 1, 80);
-bench("HOLEY_ELEMENTS  flat(2) [improved]", hObj, 2, 80);
-bench("HOLEY_ELEMENTS  flat(1) [control]",  hObj, 1, 80);
+function run() {
+  var total = 0;
+  for (var i = 0; i < shapes.length; i++) {
+    total += shapes[i].flat(2).length;
+  }
+  return total;
+}
