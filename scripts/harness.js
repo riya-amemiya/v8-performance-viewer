@@ -16,13 +16,19 @@
 'use strict';
 
 var DEFAULTS = {
-  // Number of measured samples.
+  // Number of measured samples. The reported figure is their median, so a
+  // handful of samples spoiled by a GC pause or scheduler hiccup do not move
+  // the result.
   samples: 30,
   // Samples executed and discarded before measuring, to let tiering settle.
   warmupSamples: 10,
   // Minimum duration of one sample in milliseconds; the harness calibrates
-  // the inner iteration count until a sample takes at least this long.
-  minSampleMs: 50,
+  // the inner iteration count until a sample takes at least this long. Longer
+  // samples average more inner iterations together, so timer resolution and
+  // scheduling jitter shrink relative to the measured work — the main lever
+  // against run-to-run variance. 300ms keeps each bench a few seconds while
+  // reading steadily.
+  minSampleMs: 300,
   // Fixed inner iteration count. 0 means "calibrate automatically".
   innerIterations: 0,
 };
