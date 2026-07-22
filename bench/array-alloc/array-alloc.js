@@ -1,29 +1,35 @@
-// Benchmark for the tagged hole-fill V8 runs when it allocates or grows an
-// array backing store. `new Array(N)` allocates an N-slot FixedArray and fills
-// it with holes, and assigning past the end of an empty array grows the
-// backing store and hole-fills the gap. Both go through base::Memset via
-// MemsetTagged (see src/objects/fixed-array-inl.h and src/objects/elements.cc,
-// the kCopyToEndAndInitializeToHole path). This is the path commit e180dd6
-// ("[base] Use std::fill_n in base::Memset") rewrites, so a bench dominated by
-// large hole-fills is where that change should show up.
+// Benchmark for the tagged hole-fill V8 runs when it allocates an array
+// backing store. `new Array(N)` allocates an N-slot FixedArray and fills it
+// with holes through base::Memset via MemsetTagged (see
+// src/objects/fixed-array-inl.h). That fill is the path commit e180dd6
+// ("[base] Use std::fill_n in base::Memset") rewrites, so a workload dominated
+// by it is where the change should show.
 //
-// See scripts/harness.js for the run()/setup() contract. Elements are written
-// and read back so the backing stores must materialize and are not eliminated.
+// N is kept under kMaxRegularHeapObjectSize (128 KB on x64 — kPageSizeBits is
+// 18, so the limit is 1 << 17). 16000 slots is under it whether tagged slots
+// are 4 bytes (pointer compression, ~64 KB) or 8 bytes (~128 KB), so each
+// backing store is a regular young-generation object that dies in the next
+// cheap, uniform scavenge. Above the limit the array lands in large-object
+// space and is reclaimed by major GC, and the numbers then measure GC
+// scheduling instead of the hole-fill — that is what made the earlier
+// 100000-slot version noisy. Keeping the allocation young is what makes this a
+// stable memset benchmark rather than a GC one.
+//
+// See scripts/harness.js for the run()/setup() contract. Each array is written,
+// read back, and made to escape so the allocation and its hole-fill are real
+// and not optimized away.
 
-var N = 100000;
+var N = 16000; // FixedArray backing store stays under the young-generation limit
+var COUNT = 16; // allocations per measured call
+var escape; // sink that forces each allocation to escape
 
 function run() {
   var total = 0;
-  for (var k = 0; k < 8; k++) {
-    // Allocation hole-fill: the N-slot backing store is filled with holes.
-    var a = new Array(N);
+  for (var k = 0; k < COUNT; k++) {
+    var a = new Array(N); // hole-fill N slots via MemsetTagged, young-space alloc
     a[k] = k;
+    escape = a;
     total += a[k];
-    // Grow hole-fill: assigning at N-1 grows an empty array from zero capacity
-    // and hole-fills the gap below the written index.
-    var b = [];
-    b[N - 1] = k;
-    total += b.length;
   }
   return total;
 }
