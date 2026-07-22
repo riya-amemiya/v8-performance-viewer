@@ -47,10 +47,11 @@ percent versus the reference. Each entry accepts the following version specs.
 | `main` | Any branch existing on the fork (the submodule remote), e.g. `main` or an experiment branch. |
 | 40-hex sha | An exact commit on the fork. |
 
-An optional `"d8Flags"` array passes flags to `d8` before the harness script, for example
-`"d8Flags": ["--predictable-gc-schedule"]` to give an allocation-heavy bench a deterministic
-GC schedule (a fixed young-generation size and heap-growth) so run-to-run variance from GC
-timing drops while `performance.now` still reports real wall-clock time.
+Every bench runs under `--predictable-gc-schedule` (a fixed young-generation size and
+heap-growth, no memory reducer) so GC pauses stay deterministic across samples and don't add
+run-to-run variance; `performance.now` still reports real wall-clock time, so the measurement
+is not distorted. A bench that allocates little per iteration is unaffected. An optional
+`"d8Flags"` array in the config passes additional flags to `d8` before the harness script.
 
 The benchmark script is plain JavaScript executed by `d8`:
 
@@ -72,9 +73,8 @@ The harness calibrates an inner iteration count so one sample takes at least `mi
 (300ms by default), discards `warmupSamples` warmup samples, then measures `samples` samples
 and reports the median ops/sec of each build. The viewer shows each version's median relative
 to the reference. Longer samples average more inner iterations together, so raising
-`minSampleMs` is one lever if a bench reads noisily; for allocation-heavy benches, whose noise
-comes from GC pauses rather than timing resolution, `"d8Flags": ["--predictable-gc-schedule"]`
-is the more effective one.
+`minSampleMs` is the lever if a bench reads noisily for timing-resolution reasons; GC-pause
+noise is already handled by the default `--predictable-gc-schedule`.
 
 ## CI workflow
 
