@@ -2,11 +2,14 @@
 /.gclient
 /.gclient_entries
 /.gclient_previous_sync_commits
+/.gcs_entries
 /.depot_tools/
 /.cipd/
 
 # Build and bench outputs
 /d8-out/
+/d8-validate/
+/build-validate.log
 /results/
 /plan.json
 
