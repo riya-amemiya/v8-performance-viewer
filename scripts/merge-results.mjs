@@ -29,7 +29,9 @@ const versionsBySpec = new Map(plan.versions.map((v) => [v.spec, v]));
 
 function loadMeasurement(spec, benchName) {
   const version = versionsBySpec.get(spec);
-  const file = join(measurementsRoot, `measurements-${version.key}`, `${benchName}.json`);
+  // Each (bench, version) run uploads its own artifact, downloaded into a
+  // directory named after it (see .github/workflows/bench.yml).
+  const file = join(measurementsRoot, `measure-${version.key}-${benchName}`, `${benchName}.json`);
   if (!existsSync(file)) {
     throw new Error(`missing measurement for bench "${benchName}" at version "${spec}" (${file})`);
   }
