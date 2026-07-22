@@ -31,11 +31,20 @@ function arg(name) {
   return process.argv[index + 1];
 }
 
+function optArg(name) {
+  const index = process.argv.indexOf(name);
+  return index === -1 || index + 1 >= process.argv.length ? null : process.argv[index + 1];
+}
+
 const planPath = arg('--plan');
 const versionKey = arg('--version-key');
 const d8Root = resolve(arg('--d8-root'));
 const outDir = resolve(arg('--out'));
 const sample = process.argv.includes('--sample');
+// Optional: measure a single named bench. CI passes this so each job runs
+// exactly one (bench, version) pair; omitting it measures every bench that
+// references the version (useful for local runs).
+const onlyBench = optArg('--bench');
 
 const plan = JSON.parse(readFileSync(planPath, 'utf8'));
 const version = plan.versions.find((v) => v.key === versionKey);
@@ -43,8 +52,13 @@ if (!version) {
   throw new Error(`plan has no version with key "${versionKey}"`);
 }
 
-const benches = plan.benches.filter((b) => b.versions.includes(version.spec));
-if (benches.length === 0) {
+let benches = plan.benches.filter((b) => b.versions.includes(version.spec));
+if (onlyBench) {
+  benches = benches.filter((b) => b.name === onlyBench);
+  if (benches.length === 0) {
+    throw new Error(`bench "${onlyBench}" does not reference version spec "${version.spec}"`);
+  }
+} else if (benches.length === 0) {
   throw new Error(`no bench references version spec "${version.spec}"`);
 }
 
