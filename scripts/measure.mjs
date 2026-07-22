@@ -75,8 +75,10 @@ mkdirSync(outDir, { recursive: true });
 const failures = [];
 for (const bench of benches) {
   const benchFile = resolve(repoRoot, bench.dir, bench.bench);
+  // Optional per-bench d8 flags (config "d8Flags"), passed before the script.
+  const d8Flags = Array.isArray(bench.d8Flags) ? bench.d8Flags : [];
   try {
-    const output = execFileSync(d8, [harnessPath, '--', benchFile], {
+    const output = execFileSync(d8, [...d8Flags, harnessPath, '--', benchFile], {
       encoding: 'utf8',
       timeout: 15 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
@@ -100,6 +102,7 @@ for (const bench of benches) {
       source: version.source,
       sha: version.sha,
       d8Version: result.version,
+      d8Flags,
       innerIterations: result.innerIterations,
       samples: result.samples,
       stats: result.stats,

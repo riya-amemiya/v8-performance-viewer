@@ -157,11 +157,18 @@ function loadBenches(filter) {
     if (!existsSync(benchFile)) {
       throw new Error(`bench "${entry.name}": bench file "${config.bench}" does not exist`);
     }
+    // Optional d8 flags passed before the harness script, e.g.
+    // ["--predictable-gc-schedule"] to stabilize allocation-heavy benches.
+    const d8Flags = config.d8Flags ?? [];
+    if (!Array.isArray(d8Flags) || d8Flags.some((f) => typeof f !== 'string' || !f.startsWith('-'))) {
+      throw new Error(`bench "${entry.name}": "d8Flags" must be an array of flag strings (each starting with "-")`);
+    }
     benches.push({
       name: entry.name,
       dir: `bench/${entry.name}`,
       bench: config.bench,
       versions,
+      d8Flags,
     });
   }
   return benches;

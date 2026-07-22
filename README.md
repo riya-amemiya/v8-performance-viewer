@@ -47,6 +47,11 @@ percent versus the reference. Each entry accepts the following version specs.
 | `main` | Any branch existing on the fork (the submodule remote), e.g. `main` or an experiment branch. |
 | 40-hex sha | An exact commit on the fork. |
 
+An optional `"d8Flags"` array passes flags to `d8` before the harness script, for example
+`"d8Flags": ["--predictable-gc-schedule"]` to give an allocation-heavy bench a deterministic
+GC schedule (a fixed young-generation size and heap-growth) so run-to-run variance from GC
+timing drops while `performance.now` still reports real wall-clock time.
+
 The benchmark script is plain JavaScript executed by `d8`:
 
 ```js
@@ -67,7 +72,9 @@ The harness calibrates an inner iteration count so one sample takes at least `mi
 (300ms by default), discards `warmupSamples` warmup samples, then measures `samples` samples
 and reports the median ops/sec of each build. The viewer shows each version's median relative
 to the reference. Longer samples average more inner iterations together, so raising
-`minSampleMs` is the main lever if a bench still reads noisily.
+`minSampleMs` is one lever if a bench reads noisily; for allocation-heavy benches, whose noise
+comes from GC pauses rather than timing resolution, `"d8Flags": ["--predictable-gc-schedule"]`
+is the more effective one.
 
 ## CI workflow
 
