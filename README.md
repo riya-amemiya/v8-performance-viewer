@@ -48,10 +48,13 @@ percent versus the reference. Each entry accepts the following version specs.
 | 40-hex sha | An exact commit on the fork. |
 
 Every bench runs under `--predictable-gc-schedule` (a fixed young-generation size and
-heap-growth, no memory reducer) so GC pauses stay deterministic across samples and don't add
-run-to-run variance; `performance.now` still reports real wall-clock time, so the measurement
-is not distorted. A bench that allocates little per iteration is unaffected. An optional
-`"d8Flags"` array in the config passes additional flags to `d8` before the harness script.
+heap-growth, no memory reducer, so GC pauses stay deterministic across samples) and
+`--no-allocation-site-pretenuring` (allocations stay in the young generation instead of
+flipping between young and old space on allocation-site feedback, which made
+allocation-heavy medians bimodal across runs); `performance.now` still reports real
+wall-clock time, so the measurement is not distorted. A bench that allocates little per
+iteration is unaffected. An optional `"d8Flags"` array in the config passes additional
+flags to `d8` before the harness script.
 
 The benchmark script is plain JavaScript executed by `d8`:
 
@@ -74,7 +77,7 @@ The harness calibrates an inner iteration count so one sample takes at least `mi
 and reports the median ops/sec of each build. The viewer shows each version's median relative
 to the reference. Longer samples average more inner iterations together, so raising
 `minSampleMs` is the lever if a bench reads noisily for timing-resolution reasons; GC-pause
-noise is already handled by the default `--predictable-gc-schedule`.
+noise is already handled by the default d8 flags above.
 
 ## CI workflow
 
