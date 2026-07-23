@@ -47,14 +47,15 @@ percent versus the reference. Each entry accepts the following version specs.
 | `main` | Any branch existing on the fork (the submodule remote), e.g. `main` or an experiment branch. |
 | 40-hex sha | An exact commit on the fork. |
 
-Every bench runs under `--predictable-gc-schedule` (a fixed young-generation size and
-heap-growth, no memory reducer, so GC pauses stay deterministic across samples) and
-`--no-allocation-site-pretenuring` (allocations stay in the young generation instead of
-flipping between young and old space on allocation-site feedback, which made
-allocation-heavy medians bimodal across runs); `performance.now` still reports real
-wall-clock time, so the measurement is not distorted. A bench that allocates little per
-iteration is unaffected. An optional `"d8Flags"` array in the config passes additional
-flags to `d8` before the harness script.
+Every bench runs under a fixed 64MB young generation, fixed heap growth, no memory
+reducer, and `--no-allocation-site-pretenuring`. The fixed sizes keep the GC schedule
+deterministic across samples; the 64MB young generation keeps scavenges rare enough that
+allocation-heavy benches measure their workload instead of scavenge scheduling (under a
+4MB young generation, array-alloc read 24–25% CV; at 64MB it reads 2–3%); and disabling
+allocation-site pretenuring stops constructor allocations from flipping between young and
+old space mid-measurement, which is bimodal by nature. `performance.now` still reports
+real wall-clock time, so the measurement is not distorted. An optional `"d8Flags"` array
+in the config passes additional flags to `d8` before the harness script.
 
 The benchmark script is plain JavaScript executed by `d8`:
 
