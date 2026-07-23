@@ -35,16 +35,28 @@ const ROUNDS = 3;
 // the same deterministic memory behavior; performance.now still reports real
 // wall-clock time, so the measurement itself is not distorted.
 //
-// --predictable-gc-schedule fixes the young-generation size, heap growth, and
-// memory reducer, so GC pauses stop varying from run to run.
+// The fixed 64MB young generation, fixed heap growth, and disabled memory
+// reducer make the GC schedule deterministic (the same determinism
+// --predictable-gc-schedule provides, spelled out because V8 fatals when an
+// explicit flag contradicts that flag's implied 4MB semi-space). The 64MB
+// young generation is the load-bearing part: under the 4MB pin, an
+// allocation-heavy bench scavenges every couple of run() calls and scavenge
+// scheduling dominates the samples — array-alloc read 24-25% CV with a heavy
+// tail; at 64MB it reads 2.0-3.3% CV with mean and median aligned, and the
+// array-grow / array-fill / copy-within controls all sit at 0.9-3.3% CV
+// (measured on a real 15.2 d8, three runs per condition).
 //
 // --no-allocation-site-pretenuring pins allocations to the young generation.
 // Allocation-site feedback otherwise flips constructor allocations between
-// young and old space mid-measurement, which made array-alloc bimodal:
-// measured on a real 15.2 d8, its run-to-run medians spread 23% under the GC
-// flag alone and 1.5% with pretenuring disabled, while the array-fill and
-// array-grow controls were unaffected.
-const DEFAULT_D8_FLAGS = ['--predictable-gc-schedule', '--no-allocation-site-pretenuring'];
+// young and old space mid-measurement, which is bimodal by nature: run-to-run
+// medians spread 23% with pretenuring enabled and 1.5% without.
+const DEFAULT_D8_FLAGS = [
+  '--min-semi-space-size=64',
+  '--max-semi-space-size=64',
+  '--heap-growing-percent=30',
+  '--no-memory-reducer',
+  '--no-allocation-site-pretenuring',
+];
 
 function arg(name) {
   const index = process.argv.indexOf(name);
