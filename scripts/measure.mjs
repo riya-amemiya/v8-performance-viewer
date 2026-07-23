@@ -137,11 +137,22 @@ const meta = {
 
 mkdirSync(outDir, { recursive: true });
 
-// Interleave: one full harness run per version per round, round-robin.
+// Interleave: one full harness run per version per round. The order inside a
+// round is shuffled per round; with a fixed rotation, machine-performance
+// drift that happens to be in phase with the rotation hands one version all
+// the fast slots (a CI run read one version +12% on array-fill; the same
+// binaries on constant hardware measured 1.7% apart), and shuffling breaks
+// that correlation.
 const collected = new Map(versions.map((v) => [v.spec, { samples: [], inners: [], roundMedians: [], d8Version: null }]));
 const failed = new Map();
 for (let round = 1; round <= ROUNDS; round++) {
-  for (const version of versions) {
+  const order = versions.slice();
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  console.log(`${bench.name}; round ${round} order; ${order.map((v) => v.spec).join(' -> ')}`);
+  for (const version of order) {
     if (failed.has(version.spec)) continue;
     try {
       const result = runOnce(version);
