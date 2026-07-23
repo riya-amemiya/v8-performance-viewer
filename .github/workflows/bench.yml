@@ -79,14 +79,17 @@ jobs:
   bench:
     needs: [plan, build]
     runs-on: ubuntu-latest
-    # One job per (bench, version) pair, so every bench is measured alone on a
-    # fresh runner for each version and never shares a runner with another
-    # bench.
+    # One job per bench. All of the bench's versions run on this one runner —
+    # hosted runners have heterogeneous CPUs, so spreading versions across
+    # runners compares hardware, not V8. Each version still runs as its own
+    # fresh d8 process and the versions are interleaved round-robin inside
+    # measure.mjs, so no JIT/GC state leaks between versions and machine
+    # drift hits every version equally. Benches never share a runner.
     strategy:
       fail-fast: false
       matrix:
-        run: ${{ fromJSON(needs.plan.outputs.plan).runs }}
-    name: bench ${{ matrix.run.bench }} @ ${{ matrix.run.versionSpec }}
+        bench: ${{ fromJSON(needs.plan.outputs.plan).benches }}
+    name: bench (${{ matrix.bench.name }})
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -97,20 +100,19 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: d8-${{ matrix.run.versionKey }}
-          path: d8-bin/d8-${{ matrix.run.versionKey }}
+          pattern: d8-*
+          path: d8-bin
 
-      - name: Run this bench for this version
+      - name: Run this bench across its versions
         env:
-          VERSION_KEY: ${{ matrix.run.versionKey }}
-          BENCH: ${{ matrix.run.bench }}
+          BENCH: ${{ matrix.bench.name }}
         run: |
           chmod +x d8-bin/d8-*/d8
-          node scripts/measure.mjs --plan plan.json --version-key "$VERSION_KEY" --bench "$BENCH" --d8-root d8-bin --out measurements
+          node scripts/measure.mjs --plan plan.json --bench "$BENCH" --d8-root d8-bin --out measurements
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: measure-${{ matrix.run.versionKey }}-${{ matrix.run.bench }}
+          name: measure-${{ matrix.bench.name }}
           path: measurements
           if-no-files-found: error
 

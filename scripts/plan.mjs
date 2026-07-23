@@ -188,16 +188,7 @@ const versions = specs.map((spec) => {
   return { ...v, key: `${sanitizeKey(spec)}-${v.sha.slice(0, 10)}` };
 });
 
-// One run per (bench, version) pair. CI turns each into its own job so a bench
-// is measured alone on a fresh runner for every version — never sharing a
-// runner with another bench, which would make its numbers depend on which
-// benches happen to share that version and bias the cross-version comparison.
-const versionBySpec = new Map(versions.map((v) => [v.spec, v]));
-const runs = benches.flatMap((b) =>
-  b.versions.map((spec) => ({ bench: b.name, versionSpec: spec, versionKey: versionBySpec.get(spec).key })),
-);
-
-const plan = { versions, benches, runs };
+const plan = { versions, benches };
 const compact = JSON.stringify(plan);
 
 if (process.env.GITHUB_OUTPUT) {

@@ -1,14 +1,18 @@
 #!/usr/bin/env node
-// Measure every bench that references one planned version, using only that
-// version's d8 build. CI runs this in a separate job per version, so the two
-// sides of a comparison never share a runner process or an execution order;
-// scripts/merge-results.mjs later pairs the measurements up.
+// Measure one bench across all of its versions on this machine, interleaved.
+//
+// CI runs one job per bench. Inside the job every version runs as its own
+// fresh d8 process (no JIT/GC state can leak between versions), the versions
+// are interleaved round-robin (A B C, A B C, ...) so slow machine drift hits
+// every version equally, and because all versions share the runner, the
+// comparison is never polluted by hardware differences between hosted
+// runners. scripts/merge-results.mjs later combines the per-version files.
 //
 // Usage:
-//   node scripts/measure.mjs --plan plan.json --version-key <key> --d8-root <dir> --out <dir> [--sample]
+//   node scripts/measure.mjs --plan plan.json --bench <name> --d8-root <dir> --out <dir> [--sample]
 //
 // <dir given to --d8-root> is expected to contain a directory named
-// "d8-<version.key>" holding a d8 executable.
+// "d8-<version.key>" per version, each holding a d8 executable.
 //
 // --sample marks the measurements as sample data; the viewer shows a banner
 // for results merged from them. Used to produce committed placeholder data
@@ -22,6 +26,10 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const harnessPath = join(repoRoot, 'scripts', 'harness.js');
+
+// Interleaved rounds per version. The reported stats pool the samples of all
+// rounds, so a disturbance during one round is outvoted by the others.
+const ROUNDS = 3;
 
 // Applied to every bench, so every version of every bench is measured under
 // the same deterministic memory behavior; performance.now still reports real
@@ -46,38 +54,68 @@ function arg(name) {
   return process.argv[index + 1];
 }
 
-function optArg(name) {
-  const index = process.argv.indexOf(name);
-  return index === -1 || index + 1 >= process.argv.length ? null : process.argv[index + 1];
-}
-
 const planPath = arg('--plan');
-const versionKey = arg('--version-key');
+const benchName = arg('--bench');
 const d8Root = resolve(arg('--d8-root'));
 const outDir = resolve(arg('--out'));
 const sample = process.argv.includes('--sample');
-// Optional: measure a single named bench. CI passes this so each job runs
-// exactly one (bench, version) pair; omitting it measures every bench that
-// references the version (useful for local runs).
-const onlyBench = optArg('--bench');
 
 const plan = JSON.parse(readFileSync(planPath, 'utf8'));
-const version = plan.versions.find((v) => v.key === versionKey);
-if (!version) {
-  throw new Error(`plan has no version with key "${versionKey}"`);
+const bench = plan.benches.find((b) => b.name === benchName);
+if (!bench) {
+  throw new Error(`plan has no bench named "${benchName}"`);
 }
-
-let benches = plan.benches.filter((b) => b.versions.includes(version.spec));
-if (onlyBench) {
-  benches = benches.filter((b) => b.name === onlyBench);
-  if (benches.length === 0) {
-    throw new Error(`bench "${onlyBench}" does not reference version spec "${version.spec}"`);
+const versions = bench.versions.map((spec) => {
+  const version = plan.versions.find((v) => v.spec === spec);
+  if (!version) {
+    throw new Error(`plan is missing resolved version for spec "${spec}"`);
   }
-} else if (benches.length === 0) {
-  throw new Error(`no bench references version spec "${version.spec}"`);
+  return version;
+});
+
+const benchFile = resolve(repoRoot, bench.dir, bench.bench);
+// Default flags plus any per-bench "d8Flags" from the config, passed before
+// the harness script.
+const d8Flags = [...DEFAULT_D8_FLAGS, ...(Array.isArray(bench.d8Flags) ? bench.d8Flags : [])];
+
+function runOnce(version) {
+  const d8 = join(d8Root, `d8-${version.key}`, 'd8');
+  const output = execFileSync(d8, [...d8Flags, harnessPath, '--', benchFile], {
+    encoding: 'utf8',
+    timeout: 15 * 60_000,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  const line = output
+    .split('\n')
+    .reverse()
+    .find((l) => l.startsWith('V8BENCH_RESULT '));
+  if (!line) {
+    throw new Error(`no V8BENCH_RESULT line in d8 output:\n${output}`);
+  }
+  const result = JSON.parse(line.slice('V8BENCH_RESULT '.length));
+  if (result.error) {
+    throw new Error(`harness reported an error; ${result.error}`);
+  }
+  return result;
 }
 
-const d8 = join(d8Root, `d8-${version.key}`, 'd8');
+function stats(values) {
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mean = sorted.reduce((sum, v) => sum + v, 0) / sorted.length;
+  const half = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0 ? (sorted[half - 1] + sorted[half]) / 2 : sorted[half];
+  const variance = sorted.reduce((sum, v) => sum + (v - mean) ** 2, 0) / sorted.length;
+  const stddev = Math.sqrt(variance);
+  return {
+    mean,
+    median,
+    stddev,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+    cv: mean === 0 ? 0 : stddev / mean,
+  };
+}
+
 const meta = {
   measuredAt: new Date().toISOString(),
   runnerOs: process.env.RUNNER_OS ?? null,
@@ -87,51 +125,58 @@ const meta = {
 
 mkdirSync(outDir, { recursive: true });
 
-const failures = [];
-for (const bench of benches) {
-  const benchFile = resolve(repoRoot, bench.dir, bench.bench);
-  // Default flags plus any per-bench "d8Flags" from the config, passed before
-  // the harness script.
-  const d8Flags = [...DEFAULT_D8_FLAGS, ...(Array.isArray(bench.d8Flags) ? bench.d8Flags : [])];
-  try {
-    const output = execFileSync(d8, [...d8Flags, harnessPath, '--', benchFile], {
-      encoding: 'utf8',
-      timeout: 15 * 60_000,
-      maxBuffer: 16 * 1024 * 1024,
-    });
-    const line = output
-      .split('\n')
-      .reverse()
-      .find((l) => l.startsWith('V8BENCH_RESULT '));
-    if (!line) {
-      throw new Error(`no V8BENCH_RESULT line in d8 output:\n${output}`);
+// Interleave: one full harness run per version per round, round-robin.
+const collected = new Map(versions.map((v) => [v.spec, { samples: [], inners: [], roundMedians: [], d8Version: null }]));
+const failed = new Map();
+for (let round = 1; round <= ROUNDS; round++) {
+  for (const version of versions) {
+    if (failed.has(version.spec)) continue;
+    try {
+      const result = runOnce(version);
+      const entry = collected.get(version.spec);
+      entry.samples.push(...result.samples);
+      entry.inners.push(result.innerIterations);
+      entry.roundMedians.push(result.stats.median);
+      entry.d8Version = result.version;
+      console.log(`${bench.name}; ${version.spec}; round ${round}/${ROUNDS}; median ${result.stats.median.toFixed(0)} ops/s`);
+    } catch (error) {
+      failed.set(version.spec, String(error));
+      console.error(`${bench.name}; ${version.spec}; round ${round} failed; ${error}`);
     }
-    const result = JSON.parse(line.slice('V8BENCH_RESULT '.length));
-    if (result.error) {
-      throw new Error(`harness reported an error; ${result.error}`);
-    }
-    const measurement = {
-      bench: bench.name,
-      spec: version.spec,
-      resolved: version.resolved,
-      kind: version.kind,
-      source: version.source,
-      sha: version.sha,
-      d8Version: result.version,
-      d8Flags,
-      innerIterations: result.innerIterations,
-      samples: result.samples,
-      stats: result.stats,
-      meta,
-    };
-    writeFileSync(join(outDir, `${bench.name}.json`), JSON.stringify(measurement, null, 2));
-    console.log(`${bench.name}; ${version.spec}; median ${result.stats.median.toFixed(0)} ops/s`);
-  } catch (error) {
-    failures.push({ bench: bench.name, error: String(error) });
-    console.error(`bench "${bench.name}" failed; ${error}`);
   }
 }
 
-if (failures.length > 0) {
+for (const version of versions) {
+  if (failed.has(version.spec)) continue;
+  const entry = collected.get(version.spec);
+  const pooled = stats(entry.samples);
+  // The median inner-iteration count across rounds; per-round values are kept
+  // alongside since calibration may differ between rounds.
+  const innerSorted = entry.inners.slice().sort((a, b) => a - b);
+  const measurement = {
+    bench: bench.name,
+    spec: version.spec,
+    resolved: version.resolved,
+    kind: version.kind,
+    source: version.source,
+    sha: version.sha,
+    d8Version: entry.d8Version,
+    d8Flags,
+    rounds: ROUNDS,
+    innerIterations: innerSorted[Math.floor(innerSorted.length / 2)],
+    innerIterationsPerRound: entry.inners,
+    roundMedians: entry.roundMedians,
+    samples: entry.samples,
+    stats: pooled,
+    meta,
+  };
+  writeFileSync(join(outDir, `${version.key}.json`), JSON.stringify(measurement, null, 2));
+  console.log(
+    `${bench.name}; ${version.spec}; pooled median ${pooled.median.toFixed(0)} ops/s over ${ROUNDS} rounds ` +
+      `(round medians ${entry.roundMedians.map((m) => m.toFixed(0)).join(', ')})`,
+  );
+}
+
+if (failed.size > 0) {
   process.exitCode = 1;
 }
