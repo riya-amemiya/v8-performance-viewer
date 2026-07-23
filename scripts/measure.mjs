@@ -23,6 +23,13 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const harnessPath = join(repoRoot, 'scripts', 'harness.js');
 
+// Applied to every bench. A deterministic GC schedule (fixed young-generation
+// size, heap growth, and no memory reducer) keeps GC pauses from varying run to
+// run, which is the dominant source of variance in allocation-heavy benches;
+// performance.now still reports real wall-clock time, so it does not distort the
+// measurement. Benches that allocate little per iteration are unaffected.
+const DEFAULT_D8_FLAGS = ['--predictable-gc-schedule'];
+
 function arg(name) {
   const index = process.argv.indexOf(name);
   if (index === -1 || index + 1 >= process.argv.length) {
@@ -75,8 +82,11 @@ mkdirSync(outDir, { recursive: true });
 const failures = [];
 for (const bench of benches) {
   const benchFile = resolve(repoRoot, bench.dir, bench.bench);
+  // Default flags plus any per-bench "d8Flags" from the config, passed before
+  // the harness script.
+  const d8Flags = [...DEFAULT_D8_FLAGS, ...(Array.isArray(bench.d8Flags) ? bench.d8Flags : [])];
   try {
-    const output = execFileSync(d8, [harnessPath, '--', benchFile], {
+    const output = execFileSync(d8, [...d8Flags, harnessPath, '--', benchFile], {
       encoding: 'utf8',
       timeout: 15 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
@@ -100,6 +110,7 @@ for (const bench of benches) {
       source: version.source,
       sha: version.sha,
       d8Version: result.version,
+      d8Flags,
       innerIterations: result.innerIterations,
       samples: result.samples,
       stats: result.stats,
