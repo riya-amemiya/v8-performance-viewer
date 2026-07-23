@@ -23,12 +23,20 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const harnessPath = join(repoRoot, 'scripts', 'harness.js');
 
-// Applied to every bench. A deterministic GC schedule (fixed young-generation
-// size, heap growth, and no memory reducer) keeps GC pauses from varying run to
-// run, which is the dominant source of variance in allocation-heavy benches;
-// performance.now still reports real wall-clock time, so it does not distort the
-// measurement. Benches that allocate little per iteration are unaffected.
-const DEFAULT_D8_FLAGS = ['--predictable-gc-schedule'];
+// Applied to every bench, so every version of every bench is measured under
+// the same deterministic memory behavior; performance.now still reports real
+// wall-clock time, so the measurement itself is not distorted.
+//
+// --predictable-gc-schedule fixes the young-generation size, heap growth, and
+// memory reducer, so GC pauses stop varying from run to run.
+//
+// --no-allocation-site-pretenuring pins allocations to the young generation.
+// Allocation-site feedback otherwise flips constructor allocations between
+// young and old space mid-measurement, which made array-alloc bimodal:
+// measured on a real 15.2 d8, its run-to-run medians spread 23% under the GC
+// flag alone and 1.5% with pretenuring disabled, while the array-fill and
+// array-grow controls were unaffected.
+const DEFAULT_D8_FLAGS = ['--predictable-gc-schedule', '--no-allocation-site-pretenuring'];
 
 function arg(name) {
   const index = process.argv.indexOf(name);
