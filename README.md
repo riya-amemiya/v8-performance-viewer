@@ -89,13 +89,15 @@ filter) and on pushes to `main` touching `bench/`, `scripts/`, or `web/`.
    using depot_tools/gclient. Built binaries are cached by commit sha
    (`actions/cache`), so a version is only ever compiled once — expect the first build of
    a new version to take a few hours, and later runs to restore from cache in seconds.
-3. `bench` runs one job per (bench, version) pair, so each bench is measured alone on a
-   fresh runner with its own `d8` build. No two versions of a comparison share a runner
-   or an execution order, and a bench never shares a runner with another bench — otherwise
-   its numbers would depend on which benches happen to share a version's runner and bias
-   the cross-version comparison. Each measurement records the runner CPU model for
-   cross-checking.
-4. `merge` combines the per-run measurements into one comparison JSON per bench, with
+3. `bench` runs one job per bench, and that job measures all of the bench's versions on
+   the same runner. Hosted runners have heterogeneous CPUs, so spreading versions across
+   runners would compare hardware rather than V8 — sharing the runner holds hardware
+   constant. Each version still runs as its own fresh `d8` process (no JIT or GC state
+   can leak between versions), the versions are interleaved round-robin over several
+   rounds so machine drift hits every version equally, and the reported stats pool all
+   rounds. Benches never share a runner with each other. Each measurement records the
+   runner CPU model for cross-checking.
+4. `merge` combines the per-bench measurements into one comparison JSON per bench, with
    every version's median expressed relative to the first (the reference).
 5. `deploy` injects the fresh result JSONs into the viewer, builds it with bun, and
    deploys to GitHub Pages.
