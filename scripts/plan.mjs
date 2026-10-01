@@ -174,26 +174,29 @@ function loadBenches(filter) {
   return benches;
 }
 
-const pretty = process.argv.includes('--pretty');
-const filter = (process.env.BENCH_FILTER ?? '').trim();
-
-const benches = loadBenches(filter);
-if (benches.length === 0) {
-  throw new Error(filter ? `no bench folder matches filter "${filter}"` : 'no bench folders found under bench/');
-}
-
-const specs = [...new Set(benches.flatMap((b) => b.versions))];
-const versions = specs.map((spec) => {
+export function resolveVersion(spec) {
   const v = resolveSpec(spec);
   return { ...v, key: `${sanitizeKey(spec)}-${v.sha.slice(0, 10)}` };
-});
+}
 
-const plan = { versions, benches };
-const compact = JSON.stringify(plan);
+export function writePlan(plan) {
+  const compact = JSON.stringify(plan);
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `plan=${compact}\n`);
+    console.log(JSON.stringify(plan, null, 2));
+  } else {
+    console.log(process.argv.includes('--pretty') ? JSON.stringify(plan, null, 2) : compact);
+  }
+}
 
-if (process.env.GITHUB_OUTPUT) {
-  appendFileSync(process.env.GITHUB_OUTPUT, `plan=${compact}\n`);
-  console.log(JSON.stringify(plan, null, 2));
-} else {
-  console.log(pretty ? JSON.stringify(plan, null, 2) : compact);
+if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  const filter = (process.env.BENCH_FILTER ?? '').trim();
+
+  const benches = loadBenches(filter);
+  if (benches.length === 0) {
+    throw new Error(filter ? `no bench folder matches filter "${filter}"` : 'no bench folders found under bench/');
+  }
+
+  const specs = [...new Set(benches.flatMap((b) => b.versions))];
+  writePlan({ versions: specs.map(resolveVersion), benches });
 }
