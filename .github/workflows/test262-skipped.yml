@@ -1,0 +1,99 @@
+name: test262-skipped
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: V8 version spec whose SKIP-marked test262 tests are run (same forms as bench config versions)
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Resolve version
+        id: plan
+        env:
+          VERSION_SPEC: ${{ inputs.version }}
+        run: node scripts/plan-test262.mjs
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.plan.outputs.plan).versions }}
+    name: build d8 (${{ matrix.version.spec }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Restore previously built d8
+        id: d8-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: d8-out
+          key: d8-${{ runner.os }}-${{ matrix.version.sha }}-${{ hashFiles('scripts/build-d8.sh') }}
+
+      - name: Free disk space
+        if: steps.d8-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+
+      - name: Build d8
+        if: steps.d8-cache.outputs.cache-hit != 'true'
+        env:
+          SOURCE: ${{ matrix.version.source }}
+          REF: ${{ matrix.version.ref }}
+          SHA: ${{ matrix.version.sha }}
+        run: scripts/build-d8.sh "$SOURCE" "$REF" "$SHA" "$PWD/d8-out"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: d8-${{ matrix.version.key }}
+          path: d8-out
+          if-no-files-found: error
+
+  test262:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.plan.outputs.plan).versions }}
+    name: test262 SKIP tests (${{ matrix.version.spec }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: d8-${{ matrix.version.key }}
+          path: d8-out
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+
+      - name: Prepare V8 checkout and test262 data
+        env:
+          SOURCE: ${{ matrix.version.source }}
+          REF: ${{ matrix.version.ref }}
+          SHA: ${{ matrix.version.sha }}
+        run: scripts/prepare-test262.sh "$SOURCE" "$REF" "$SHA" "$PWD/d8-out"
+
+      - name: Run SKIP-marked test262 tests and list the ones that pass
+        run: python3 scripts/test262-skipped.py --v8-root v8 --build-dir v8/out/release --out "$RUNNER_TEMP/test262"
