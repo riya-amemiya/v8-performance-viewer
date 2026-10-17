@@ -1,0 +1,4 @@
+{
+  "versions": ["15.5.3", "15.5.4"],
+  "bench": "./array-last-index-of-packed-smi-hit-start.js"
+}

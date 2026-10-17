@@ -1,0 +1,4 @@
+{
+  "versions": ["15.2.115", "15.2.116"],
+  "bench": "./array-fill-double-full.js"
+}
