@@ -1,0 +1,4 @@
+{
+  "versions": ["15.6", "15.7"],
+  "bench": "./intl-date-time-format-era-japanese-d785c2ad.js"
+}

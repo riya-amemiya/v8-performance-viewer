@@ -1,0 +1,4 @@
+{
+  "versions": ["14.5", "14.6"],
+  "bench": "./object-property-is-enumerable-5f716ce6.js"
+}

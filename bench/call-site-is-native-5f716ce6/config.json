@@ -1,0 +1,4 @@
+{
+  "versions": ["14.5", "14.6"],
+  "bench": "./call-site-is-native-5f716ce6.js"
+}
