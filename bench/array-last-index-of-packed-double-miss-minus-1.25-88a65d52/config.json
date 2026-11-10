@@ -1,4 +1,0 @@
-{
-  "versions": ["79240022cc1638c82310ea529fcf22900acb5c01", "88a65d5235c8b2cd4270da6b7293a5dd60582579"],
-  "bench": "./array-last-index-of-packed-double-miss-minus-1.25-88a65d52.js"
-}

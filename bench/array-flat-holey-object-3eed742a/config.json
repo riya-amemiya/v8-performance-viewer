@@ -1,4 +1,4 @@
 {
-  "versions": ["832b03782403bdd589c31a5f395852d44cf7dc30", "3eed742a70b10c8344023361ef7a292f20b6a33b"],
+  "versions": ["14.6", "14.7"],
   "bench": "./array-flat-holey-object-3eed742a.js"
 }

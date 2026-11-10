@@ -1,4 +1,4 @@
 {
-  "versions": ["6f22cb46b1e5eb87a2beac4ca70278b514af8b96", "e180dd6fc09d4911f7dc5f15c0f0b2739f915da8"],
+  "versions": ["15.1", "15.2"],
   "bench": "./array-new-holey-e180dd6f.js"
 }

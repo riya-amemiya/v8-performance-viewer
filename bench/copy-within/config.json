@@ -1,4 +1,4 @@
 {
-  "versions": ["14.5", "15.2.116"],
+  "versions": ["14.5", "15.2"],
   "bench": "./copy-within.js"
 }

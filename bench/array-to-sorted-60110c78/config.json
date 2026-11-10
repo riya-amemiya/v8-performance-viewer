@@ -1,4 +1,4 @@
 {
-  "versions": ["7239471e19dd0f7f7ea4dcac0e168d1b85f45372", "60110c787e0930c2c019406cb251e5f81468cb12"],
+  "versions": ["15.8", "main"],
   "bench": "./array-to-sorted-60110c78.js"
 }

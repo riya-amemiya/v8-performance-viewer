@@ -1,4 +1,4 @@
 {
-  "versions": ["f543f9cb3ce90392f81ea2a8a35ae74adb9f6f79", "93603e3f07a9ba73ad8e9a61ab4066838097befb"],
+  "versions": ["15.3", "15.4"],
   "bench": "./temporal-format-instant-ja-93603e3f.js"
 }

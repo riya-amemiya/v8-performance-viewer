@@ -1,4 +1,4 @@
 {
-  "versions": ["b6b247c84837cf5e6f19aef64fdec79a2b18c3d4", "eab85c87a62de28c9c9b120427da5a5514d41360"],
+  "versions": ["15.0", "15.1"],
   "bench": "./array-copy-within-object-eab85c87.js"
 }
