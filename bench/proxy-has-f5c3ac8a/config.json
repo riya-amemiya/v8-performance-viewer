@@ -1,0 +1,4 @@
+{
+  "versions": ["b07860d0159521ebeaa4361700fe1cdae4818149", "f5c3ac8acf293a86629fba37b3ba9649c864102f"],
+  "bench": "./proxy-has-f5c3ac8a.js"
+}

@@ -1,0 +1,4 @@
+{
+  "versions": ["e30d8c7ea7cd7331356055d8a6540e6c254bd892", "5f716ce606bee5f10f7c9a31f99a1fffeb8dee00"],
+  "bench": "./object-is-frozen-5f716ce6.js"
+}

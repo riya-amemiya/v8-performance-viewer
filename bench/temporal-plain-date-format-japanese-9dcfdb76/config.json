@@ -1,0 +1,4 @@
+{
+  "versions": ["6664baf473cef852ec273a0da0f07321bab483f6", "9dcfdb76933760325aaee42d668f356492fb2307"],
+  "bench": "./temporal-plain-date-format-japanese-9dcfdb76.js"
+}
